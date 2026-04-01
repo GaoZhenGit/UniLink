@@ -35,11 +35,14 @@ public class ProxyConfig {
 
     public static class Websocket {
         private int port = 8889;
+        private String wsPath = "/ws";
         private int heartbeatInterval = 30;
         private int heartbeatTimeout = 60;
 
         public int getPort() { return port; }
         public void setPort(int port) { this.port = port; }
+        public String getWsPath() { return wsPath; }
+        public void setWsPath(String wsPath) { this.wsPath = wsPath; }
         public int getHeartbeatInterval() { return heartbeatInterval; }
         public void setHeartbeatInterval(int heartbeatInterval) { this.heartbeatInterval = heartbeatInterval; }
         public int getHeartbeatTimeout() { return heartbeatTimeout; }

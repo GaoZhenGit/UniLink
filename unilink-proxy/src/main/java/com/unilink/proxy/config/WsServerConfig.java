@@ -47,6 +47,7 @@ public class WsServerConfig {
     @PostConstruct
     public void startWebSocketServer() {
         int port = proxyConfig.getWebsocket().getPort();
+        String wsPath = proxyConfig.getWebsocket().getWsPath();
         bossGroup = new NioEventLoopGroup(1);
         workerGroup = new NioEventLoopGroup();
 
@@ -63,7 +64,7 @@ public class WsServerConfig {
                             pipeline.addLast(new HttpServerCodec());
                             pipeline.addLast(new HttpObjectAggregator(65536));
                             pipeline.addLast(new WebSocketServerCompressionHandler());
-                            pipeline.addLast(new WebSocketServerProtocolHandler("/ws", null, true));
+                            pipeline.addLast(new WebSocketServerProtocolHandler(wsPath, null, true));
                             // 每次创建新实例
                             ProxyWebSocketHandler handler = new ProxyWebSocketHandler(
                                     connectionManager, requestHandler, proxyConfig);
@@ -72,7 +73,7 @@ public class WsServerConfig {
                     });
 
             bootstrap.bind(port).get();
-            log.info("WebSocket服务启动成功，端口: {}", port);
+            log.info("WebSocket服务启动成功，端口: {}, 路径: {}", port, wsPath);
         } catch (Exception e) {
             log.error("WebSocket服务启动失败", e);
             shutdown();

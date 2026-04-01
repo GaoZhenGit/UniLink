@@ -12,13 +12,27 @@ public class WorkerConfig {
     private Http http = new Http();
 
     public static class Server {
-        private String url = "wss://localhost:8889/ws";
+        private String host = "localhost";
+        private int port = 8889;
+        private String wsPath = "/ws";
+        private boolean ssl = false;
         private boolean autoReconnect = true;
 
-        public String getUrl() { return url; }
-        public void setUrl(String url) { this.url = url; }
+        public String getHost() { return host; }
+        public void setHost(String host) { this.host = host; }
+        public int getPort() { return port; }
+        public void setPort(int port) { this.port = port; }
+        public String getWsPath() { return wsPath; }
+        public void setWsPath(String wsPath) { this.wsPath = wsPath; }
+        public boolean isSsl() { return ssl; }
+        public void setSsl(boolean ssl) { this.ssl = ssl; }
         public boolean isAutoReconnect() { return autoReconnect; }
         public void setAutoReconnect(boolean autoReconnect) { this.autoReconnect = autoReconnect; }
+
+        public String getUrl() {
+            String scheme = ssl ? "wss://" : "ws://";
+            return scheme + host + ":" + port + wsPath;
+        }
     }
 
     public static class Reconnect {

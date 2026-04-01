@@ -14,7 +14,10 @@ logging:
 
 worker:
   server:
-    url: ws://localhost:8889/ws
+    host: localhost
+    port: 8889
+    ws-path: /ws
+    ssl: false
     auto-reconnect: true
   reconnect:
     initial-delay: 1000
