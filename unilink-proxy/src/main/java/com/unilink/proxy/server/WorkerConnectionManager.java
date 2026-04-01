@@ -1,0 +1,73 @@
+package com.unilink.proxy.server;
+
+import io.netty.channel.Channel;
+import io.netty.channel.ChannelHandlerContext;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
+import org.springframework.stereotype.Component;
+
+import java.util.Map;
+import java.util.Set;
+import java.util.concurrent.ConcurrentHashMap;
+import java.util.concurrent.CopyOnWriteArraySet;
+
+@Component
+public class WorkerConnectionManager {
+
+    private static final Logger log = LoggerFactory.getLogger(WorkerConnectionManager.class);
+
+    private final Set<Channel> workers = new CopyOnWriteArraySet<>();
+    private final Map<String, ChannelHandlerContext> pendingRequests = new ConcurrentHashMap<>();
+    private int roundRobinIndex = 0;
+
+    public void registerWorker(Channel channel) {
+        workers.add(channel);
+        log.info("Worker连接注册，当前Worker数量: {}", workers.size());
+    }
+
+    public void removeWorker(Channel channel) {
+        workers.remove(channel);
+        log.info("Worker断开，当前Worker数量: {}", workers.size());
+    }
+
+    public Channel getAvailableWorker() {
+        if (workers.isEmpty()) {
+            return null;
+        }
+
+        // 简单的 round-robin 负载均衡
+        synchronized (this) {
+            if (workers.isEmpty()) {
+                return null;
+            }
+            int size = workers.size();
+            Channel worker = null;
+            int attempts = 0;
+            while (attempts < size) {
+                roundRobinIndex = (roundRobinIndex + 1) % size;
+                worker = (Channel) workers.toArray()[roundRobinIndex];
+                if (worker.isActive()) {
+                    return worker;
+                }
+                attempts++;
+            }
+            return null;
+        }
+    }
+
+    public void registerPendingRequest(String msgId, ChannelHandlerContext ctx) {
+        pendingRequests.put(msgId, ctx);
+    }
+
+    public ChannelHandlerContext getPendingRequest(String msgId) {
+        return pendingRequests.get(msgId);
+    }
+
+    public void removePendingRequest(String msgId) {
+        pendingRequests.remove(msgId);
+    }
+
+    public int getWorkerCount() {
+        return workers.size();
+    }
+}

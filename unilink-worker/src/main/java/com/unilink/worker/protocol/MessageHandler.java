@@ -1,0 +1,51 @@
+package com.unilink.worker.protocol;
+
+import com.fasterxml.jackson.databind.ObjectMapper;
+import com.unilink.worker.client.WorkerWebSocketClient;
+import com.unilink.worker.config.WorkerConfig;
+import com.unilink.worker.http.RealHttpClient;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
+import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.context.annotation.Lazy;
+import org.springframework.stereotype.Component;
+
+import java.util.HashMap;
+import java.util.Map;
+
+@Component
+public class MessageHandler {
+
+    private static final Logger log = LoggerFactory.getLogger(MessageHandler.class);
+    private static final ObjectMapper objectMapper = new ObjectMapper();
+
+    @Autowired
+    @Lazy
+    private WorkerWebSocketClient wsClient;
+
+    @Autowired
+    private RealHttpClient httpClient;
+
+    public void handleHttpRequest(Map<String, Object> msg, byte[] body) {
+        try {
+            String msgId = (String) msg.get("msgId");
+            String method = (String) msg.get("method");
+            String url = (String) msg.get("url");
+
+            @SuppressWarnings("unchecked")
+            Map<String, String> headers = (Map<String, String>) msg.get("headers");
+
+            log.info("收到HTTP请求: {} {} (msgId={})", method, url, msgId);
+
+            httpClient.executeRequest(msgId, method, url, headers, body);
+        } catch (Exception e) {
+            log.error("处理HTTP请求失败", e);
+        }
+    }
+
+    public void handleBinaryResponse(byte[] body) {
+        // This is called when we receive a binary frame as part of a chunk response
+        // The RealHttpClient already handles sending responses, so this is a placeholder
+        log.debug("收到二进制响应, size={}", body.length);
+    }
+}

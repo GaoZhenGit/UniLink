@@ -1,0 +1,17 @@
+spring:
+  main:
+    allow-circular-references: true
+  server:
+    port: 8081
+
+worker:
+  server:
+    url: ws://localhost:8889/ws
+    auto-reconnect: true
+  reconnect:
+    initial-delay: 1000
+    max-delay: 60000
+    multiplier: 2.0
+  http:
+    connect-timeout: 30000
+    read-timeout: 300000
