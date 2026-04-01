@@ -100,28 +100,27 @@ public class ProxyWebSocketHandler extends TextWebSocketFrameHandler {
         byte[] body = new byte[frame.content().readableBytes()];
         frame.content().readBytes(body);
 
-        // 先检查是否是 tunnel_data
+        // 如果有 pendingTunnelMsgId，说明是隧道数据
         if (pendingTunnelMsgId != null) {
             handleTunnelData(body);
             return;
         }
 
-        // 获取当前正在处理的HTTP响应
+        // 获取当前正在处理的HTTP响应，发送 body 部分
         String currentMsgId = getCurrentMsgId();
-        if (currentMsgId != null) {
-            // 发送给HTTP客户端
-            boolean finished = "http_chunk".equals(getCurrentMsgType());
-            if (finished) {
-                requestHandler.sendResponse(currentMsgId, getCurrentStatusCode(),
-                        getCurrentHeaders(), body, !isChunkFinished());
-            }
+        if (currentMsgId != null && body.length > 0) {
+            String msgType = getCurrentMsgType();
+            boolean isFinished = "http_chunk".equals(msgType) ? isChunkFinished() : chunkFinished;
+            requestHandler.sendResponse(currentMsgId, getCurrentStatusCode(),
+                    getCurrentHeaders(), body, isFinished);
         }
     }
 
     private void handleTunnelData(byte[] body) {
-        // 转发隧道数据到客户端
+        // Worker -> 客户端：转发隧道数据到客户端
         String msgId = pendingTunnelMsgId;
-        requestHandler.sendTunnelData(msgId, body);
+        log.info("收到Worker的tunnel_data: {} bytes, 转发到客户端, msgId={}", body != null ? body.length : 0, msgId);
+        requestHandler.sendTunnelDataToClient(msgId, body);
         pendingTunnelMsgId = null;
         pendingTunnelBodyLen = 0;
     }
@@ -169,8 +168,12 @@ public class ProxyWebSocketHandler extends TextWebSocketFrameHandler {
         currentBodyLen = msg.get("bodyLen") != null ? ((Number) msg.get("bodyLen")).intValue() : 0;
         chunkFinished = msg.get("finished") != null && (Boolean) msg.get("finished");
 
-        if (currentBodyLen == 0) {
-            // 无body，直接发送响应
+        // 从 pending request 中获取原始请求方法，判断是否是 CONNECT
+        String method = connectionManager.getPendingRequestMethod(currentMsgId);
+        boolean isConnect = "CONNECT".equalsIgnoreCase(method);
+
+        if (currentBodyLen == 0 || isConnect) {
+            // 无body 或 CONNECT 请求，直接发送响应
             requestHandler.sendResponse(currentMsgId, currentStatusCode,
                     currentHeaders, null, chunkFinished);
 

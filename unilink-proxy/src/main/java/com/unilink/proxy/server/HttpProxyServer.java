@@ -10,10 +10,11 @@ import io.netty.channel.socket.nio.NioServerSocketChannel;
 import io.netty.handler.codec.http.*;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
-import javax.annotation.PostConstruct;
-import javax.annotation.PreDestroy;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Component;
+
+import javax.annotation.PostConstruct;
+import javax.annotation.PreDestroy;
 
 @Component
 public class HttpProxyServer {
@@ -25,6 +26,9 @@ public class HttpProxyServer {
 
     @Autowired
     private ProxyRequestHandler requestHandler;
+
+    @Autowired
+    private WorkerConnectionManager connectionManager;
 
     private Channel serverChannel;
     private EventLoopGroup bossGroup;
@@ -46,7 +50,7 @@ public class HttpProxyServer {
                             ChannelPipeline pipeline = ch.pipeline();
                             pipeline.addLast(new HttpServerCodec());
                             pipeline.addLast(new HttpObjectAggregator(65536));
-                            pipeline.addLast(new HttpProxyChannelHandler(requestHandler, proxyConfig));
+                            pipeline.addLast(new HttpProxyChannelHandler(requestHandler, proxyConfig, connectionManager));
                         }
                     })
                     .option(ChannelOption.SO_BACKLOG, 128)
