@@ -66,17 +66,10 @@ public class HttpProxyChannelHandler extends SimpleChannelInboundHandler<FullHtt
     private void switchToTunnelMode(ChannelHandlerContext ctx, String host, String msgId) {
         log.info("CONNECT隧道建立成功，切换到转发模式: {}", host);
 
-        // 记录切换前的连接状态
-        Channel channel = ctx.channel();
-        log.info("切换前 - channel.isActive={}, isOpen={}, isRegistered={}",
-                channel.isActive(), channel.isOpen(), channel.isRegistered());
-
         // 使用 execute 确保在正确的 EventLoop 中执行
-        channel.eventLoop().execute(() -> {
+        ctx.channel().eventLoop().execute(() -> {
             try {
                 ChannelPipeline pipeline = ctx.pipeline();
-
-                log.info("切换中 - pipeline handlers: {}", pipeline.names());
 
                 // 移除 HTTP 编解码器和当前 handler
                 pipeline.remove(HttpServerCodec.class);
@@ -90,8 +83,6 @@ public class HttpProxyChannelHandler extends SimpleChannelInboundHandler<FullHtt
                 // 添加原始数据转发 Handler
                 pipeline.addLast(new TunnelDataForwardHandler(requestHandler, msgId));
 
-                log.info("切换后 - pipeline handlers: {}, channel.isActive={}",
-                        pipeline.names(), ctx.channel().isActive());
                 log.info("隧道模式已就绪: msgId={}", msgId);
             } catch (Exception e) {
                 log.error("切换到隧道模式失败", e);
@@ -160,13 +151,7 @@ public class HttpProxyChannelHandler extends SimpleChannelInboundHandler<FullHtt
         }
 
         @Override
-        public void handlerAdded(ChannelHandlerContext ctx) {
-            log.info("TunnelDataForwardHandler added, msgId={}", msgId);
-        }
-
-        @Override
         public void channelRead(ChannelHandlerContext ctx, Object msg) throws Exception {
-            log.info("TunnelDataForwardHandler.channelRead - msgId={}, msgType={}", msgId, msg.getClass().getName());
             // 读取客户端发送的原始数据，转发到 Worker
             if (msg instanceof ByteBuf) {
                 ByteBuf buf = (ByteBuf) msg;
@@ -174,11 +159,8 @@ public class HttpProxyChannelHandler extends SimpleChannelInboundHandler<FullHtt
                 byte[] data = new byte[len];
                 buf.readBytes(data);
 
-                log.info("收到客户端数据: {} bytes, msgId={}", len, msgId);
                 // 发送到 Worker
                 requestHandler.sendTunnelData(msgId, data);
-            } else {
-                log.warn("未处理的消息类型: {}", msg.getClass().getName());
             }
         }
 

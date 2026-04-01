@@ -119,7 +119,6 @@ public class ProxyWebSocketHandler extends TextWebSocketFrameHandler {
     private void handleTunnelData(byte[] body) {
         // Worker -> 客户端：转发隧道数据到客户端
         String msgId = pendingTunnelMsgId;
-        log.info("收到Worker的tunnel_data: {} bytes, 转发到客户端, msgId={}", body != null ? body.length : 0, msgId);
         requestHandler.sendTunnelDataToClient(msgId, body);
         pendingTunnelMsgId = null;
         pendingTunnelBodyLen = 0;

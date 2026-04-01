@@ -101,19 +101,16 @@ public class ConnectTunnelHandler {
         executor.submit(() -> {
             ByteBuffer buffer = ByteBuffer.allocate(8192);
             try {
-                log.info("启动目标->Proxy转发, msgId={}", ctx.msgId);
                 while (ctx.targetChannel.isOpen()) {
                     buffer.clear();
                     int read = ctx.targetChannel.read(buffer);
                     if (read == -1) {
-                        log.info("目标服务器关闭连接, msgId={}", ctx.msgId);
                         break;
                     }
                     if (read > 0) {
                         buffer.flip();
                         byte[] data = new byte[buffer.remaining()];
                         buffer.get(data);
-                        log.info("从目标服务器读取 {} bytes, 发送给Proxy, msgId={}", data.length, ctx.msgId);
                         // 发送数据给 Proxy
                         sendTunnelData(ctx.msgId, data);
                     }
@@ -128,7 +125,6 @@ public class ConnectTunnelHandler {
 
     private void sendTunnelData(String msgId, byte[] data) {
         try {
-            log.info("Worker发送隧道数据到Proxy: {} bytes, msgId={}", data.length, msgId);
             Map<String, Object> msg = new ConcurrentHashMap<>();
             msg.put("msgId", msgId);
             msg.put("type", "tunnel_data");

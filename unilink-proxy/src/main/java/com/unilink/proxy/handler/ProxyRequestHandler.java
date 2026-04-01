@@ -188,8 +188,6 @@ public class ProxyRequestHandler {
 
         try {
             if (data != null && data.length > 0) {
-                log.info("发送隧道数据到Worker: {} bytes, msgId={}", data.length, msgId);
-
                 // 构建 tunnel_data 消息
                 Map<String, Object> msg = new HashMap<>();
                 msg.put("msgId", msgId);
@@ -223,8 +221,6 @@ public class ProxyRequestHandler {
 
         try {
             if (data != null && data.length > 0) {
-                log.info("发送隧道数据到客户端 {} bytes, channel.isActive={}, msgId={}",
-                        data.length, clientCtx.channel().isActive(), msgId);
                 ByteBuf content = clientCtx.channel().alloc().buffer(data.length);
                 content.writeBytes(data);
                 clientCtx.writeAndFlush(content);
