@@ -191,6 +191,14 @@ public class WorkerWebSocketClient {
                     messageHandler.handleHttpRequest(msg, new byte[0]);
                 }
                 break;
+            case "tunnel_data":
+                // 隧道数据，直接处理
+                pendingHttpRequest = msg;
+                int tunnelBodyLen = msg.get("bodyLen") != null ? ((Number) msg.get("bodyLen")).intValue() : 0;
+                if (tunnelBodyLen == 0) {
+                    messageHandler.handleTunnelData((String) msg.get("msgId"), new byte[0]);
+                }
+                break;
             case "heartbeat":
                 handleHeartbeat();
                 break;
@@ -206,7 +214,14 @@ public class WorkerWebSocketClient {
         byte[] body = message.getPayload().array();
 
         if (pendingHttpRequest != null) {
-            messageHandler.handleHttpRequest(pendingHttpRequest, body);
+            String type = (String) pendingHttpRequest.get("type");
+            String msgId = (String) pendingHttpRequest.get("msgId");
+
+            if ("tunnel_data".equals(type)) {
+                messageHandler.handleTunnelData(msgId, body);
+            } else {
+                messageHandler.handleHttpRequest(pendingHttpRequest, body);
+            }
             pendingHttpRequest = null;
         } else {
             messageHandler.handleBinaryResponse(body);

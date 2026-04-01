@@ -4,6 +4,14 @@ spring:
   server:
     port: 8081
 
+logging:
+  file:
+    name: logs/worker.log
+  pattern:
+    file: "%d{yyyy-MM-dd HH:mm:ss.SSS} %-5level [%thread] %logger{36} - %msg%n"
+  level:
+    com.unilink: DEBUG
+
 worker:
   server:
     url: ws://localhost:8889/ws

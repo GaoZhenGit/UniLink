@@ -1,6 +1,14 @@
 server:
   port: 8082
 
+logging:
+  file:
+    name: logs/proxy.log
+  pattern:
+    file: "%d{yyyy-MM-dd HH:mm:ss.SSS} %-5level [%thread] %logger{36} - %msg%n"
+  level:
+    com.unilink: DEBUG
+
 proxy:
   http:
     port: 8888

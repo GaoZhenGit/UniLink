@@ -75,6 +75,15 @@ public class ProxyWebSocketHandler extends TextWebSocketFrameHandler {
             case "http_chunk":
                 handleHttpResponse(msg);
                 break;
+            case "tunnel_data":
+                // 保存隧道上下文
+                pendingTunnelMsgId = (String) msg.get("msgId");
+                pendingTunnelBodyLen = msg.get("bodyLen") != null ? ((Number) msg.get("bodyLen")).intValue() : 0;
+                if (pendingTunnelBodyLen == 0) {
+                    // 无body，快速转发空数据
+                    handleTunnelData(null);
+                }
+                break;
             case "heartbeat":
                 handleHeartbeat(msg);
                 break;
@@ -88,16 +97,18 @@ public class ProxyWebSocketHandler extends TextWebSocketFrameHandler {
 
     @Override
     protected void handleBinaryFrame(ChannelHandlerContext ctx, BinaryWebSocketFrame frame) throws Exception {
-        // 解析当前pending消息的msgId
-        // 这里简化处理：假设binary frame紧跟在对应的text frame后面
-        // 实际实现需要用状态机跟踪当前消息
+        byte[] body = new byte[frame.content().readableBytes()];
+        frame.content().readBytes(body);
+
+        // 先检查是否是 tunnel_data
+        if (pendingTunnelMsgId != null) {
+            handleTunnelData(body);
+            return;
+        }
 
         // 获取当前正在处理的HTTP响应
         String currentMsgId = getCurrentMsgId();
         if (currentMsgId != null) {
-            byte[] body = new byte[frame.content().readableBytes()];
-            frame.content().readBytes(body);
-
             // 发送给HTTP客户端
             boolean finished = "http_chunk".equals(getCurrentMsgType());
             if (finished) {
@@ -107,12 +118,24 @@ public class ProxyWebSocketHandler extends TextWebSocketFrameHandler {
         }
     }
 
+    private void handleTunnelData(byte[] body) {
+        // 转发隧道数据到客户端
+        String msgId = pendingTunnelMsgId;
+        requestHandler.sendTunnelData(msgId, body);
+        pendingTunnelMsgId = null;
+        pendingTunnelBodyLen = 0;
+    }
+
     private String currentMsgId;
     private String currentMsgType;
     private int currentStatusCode;
     private Map<String, String> currentHeaders;
     private int currentBodyLen;
     private boolean chunkFinished = false;
+
+    // Tunnel 状态
+    private String pendingTunnelMsgId;
+    private int pendingTunnelBodyLen;
 
     private String getCurrentMsgId() {
         return currentMsgId;

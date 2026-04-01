@@ -48,7 +48,7 @@ public class ProxyRequestHandler {
         msg.put("headers", headers);
 
         // 存储客户端上下文，用于返回响应
-        connectionManager.registerPendingRequest(msgId, clientCtx);
+        connectionManager.registerPendingRequest(msgId, clientCtx, method);
 
         try {
             // 发送给Worker（JSON头 + 二进制body）
@@ -129,13 +129,40 @@ public class ProxyRequestHandler {
             }
 
             if (finished) {
-                clientCtx.writeAndFlush(LastHttpContent.EMPTY_LAST_CONTENT);
-                connectionManager.removePendingRequest(msgId);
-                log.info("HTTP响应完成: msgId={}", msgId);
+                // 检查是否是 CONNECT 请求
+                String method = connectionManager.getPendingRequestMethod(msgId);
+                if ("CONNECT".equalsIgnoreCase(method)) {
+                    // CONNECT 隧道保持连接，不断开
+                    log.info("CONNECT隧道建立完成: msgId={}", msgId);
+                    // 不移除 pending request，后续 tunnel_data 还需要用到
+                } else {
+                    clientCtx.writeAndFlush(LastHttpContent.EMPTY_LAST_CONTENT);
+                    connectionManager.removePendingRequest(msgId);
+                    log.info("HTTP响应完成: msgId={}", msgId);
+                }
             }
         } catch (Exception e) {
             log.error("发送HTTP响应失败: {}", msgId, e);
             clientCtx.close();
+        }
+    }
+
+    public void sendTunnelData(String msgId, byte[] data) {
+        ChannelHandlerContext clientCtx = connectionManager.getPendingRequest(msgId);
+        if (clientCtx == null) {
+            log.warn("未找到对应的客户端上下文: {}", msgId);
+            return;
+        }
+
+        try {
+            // 直接转发数据到客户端（用于 CONNECT 隧道）
+            if (data != null && data.length > 0) {
+                ByteBuf content = clientCtx.channel().alloc().buffer(data.length);
+                content.writeBytes(data);
+                clientCtx.writeAndFlush(content);
+            }
+        } catch (Exception e) {
+            log.error("发送隧道数据失败: {}", msgId, e);
         }
     }
 

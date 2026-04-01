@@ -4,6 +4,7 @@ import com.fasterxml.jackson.databind.ObjectMapper;
 import com.unilink.worker.client.WorkerWebSocketClient;
 import com.unilink.worker.config.WorkerConfig;
 import com.unilink.worker.http.RealHttpClient;
+import com.unilink.worker.tunnel.ConnectTunnelHandler;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -26,6 +27,9 @@ public class MessageHandler {
     @Autowired
     private RealHttpClient httpClient;
 
+    @Autowired
+    private ConnectTunnelHandler tunnelHandler;
+
     public void handleHttpRequest(Map<String, Object> msg, byte[] body) {
         try {
             String msgId = (String) msg.get("msgId");
@@ -37,15 +41,25 @@ public class MessageHandler {
 
             log.info("收到HTTP请求: {} {} (msgId={})", method, url, msgId);
 
-            httpClient.executeRequest(msgId, method, url, headers, body);
+            // CONNECT 请求使用隧道处理
+            if ("CONNECT".equalsIgnoreCase(method)) {
+                String[] parts = url.split(":");
+                String host = parts[0];
+                int port = parts.length > 1 ? Integer.parseInt(parts[1]) : 443;
+                tunnelHandler.handleConnect(msgId, host, port);
+            } else {
+                httpClient.executeRequest(msgId, method, url, headers, body);
+            }
         } catch (Exception e) {
             log.error("处理HTTP请求失败", e);
         }
     }
 
     public void handleBinaryResponse(byte[] body) {
-        // This is called when we receive a binary frame as part of a chunk response
-        // The RealHttpClient already handles sending responses, so this is a placeholder
         log.debug("收到二进制响应, size={}", body.length);
+    }
+
+    public void handleTunnelData(String msgId, byte[] body) {
+        tunnelHandler.handleTunnelData(msgId, body);
     }
 }

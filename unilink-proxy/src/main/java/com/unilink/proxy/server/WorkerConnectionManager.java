@@ -17,7 +17,7 @@ public class WorkerConnectionManager {
     private static final Logger log = LoggerFactory.getLogger(WorkerConnectionManager.class);
 
     private final Set<Channel> workers = new CopyOnWriteArraySet<>();
-    private final Map<String, ChannelHandlerContext> pendingRequests = new ConcurrentHashMap<>();
+    private final Map<String, PendingRequest> pendingRequests = new ConcurrentHashMap<>();
     private int roundRobinIndex = 0;
 
     public void registerWorker(Channel channel) {
@@ -56,11 +56,21 @@ public class WorkerConnectionManager {
     }
 
     public void registerPendingRequest(String msgId, ChannelHandlerContext ctx) {
-        pendingRequests.put(msgId, ctx);
+        registerPendingRequest(msgId, ctx, null);
+    }
+
+    public void registerPendingRequest(String msgId, ChannelHandlerContext ctx, String method) {
+        pendingRequests.put(msgId, new PendingRequest(ctx, method));
     }
 
     public ChannelHandlerContext getPendingRequest(String msgId) {
-        return pendingRequests.get(msgId);
+        PendingRequest req = pendingRequests.get(msgId);
+        return req != null ? req.ctx : null;
+    }
+
+    public String getPendingRequestMethod(String msgId) {
+        PendingRequest req = pendingRequests.get(msgId);
+        return req != null ? req.method : null;
     }
 
     public void removePendingRequest(String msgId) {
@@ -69,5 +79,15 @@ public class WorkerConnectionManager {
 
     public int getWorkerCount() {
         return workers.size();
+    }
+
+    private static class PendingRequest {
+        final ChannelHandlerContext ctx;
+        final String method;
+
+        PendingRequest(ChannelHandlerContext ctx, String method) {
+            this.ctx = ctx;
+            this.method = method;
+        }
     }
 }
