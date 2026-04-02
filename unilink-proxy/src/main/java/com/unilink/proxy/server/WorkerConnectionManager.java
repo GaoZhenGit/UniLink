@@ -73,6 +73,20 @@ public class WorkerConnectionManager {
         return req != null ? req.method : null;
     }
 
+    public boolean isHeadersSent(String msgId) {
+        PendingRequest req = pendingRequests.get(msgId);
+        return req != null && req.headersSent;
+    }
+
+    public void setHeadersSent(String msgId, int statusCode, Map<String, String> headers) {
+        PendingRequest req = pendingRequests.get(msgId);
+        if (req != null) {
+            req.headersSent = true;
+            req.statusCode = statusCode;
+            req.headers = headers;
+        }
+    }
+
     public void removePendingRequest(String msgId) {
         pendingRequests.remove(msgId);
     }
@@ -84,6 +98,9 @@ public class WorkerConnectionManager {
     private static class PendingRequest {
         final ChannelHandlerContext ctx;
         final String method;
+        volatile boolean headersSent = false;  // 是否已发送响应头
+        volatile int statusCode;  // 响应状态码
+        volatile Map<String, String> headers;  // 响应头
 
         PendingRequest(ChannelHandlerContext ctx, String method) {
             this.ctx = ctx;
