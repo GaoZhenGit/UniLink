@@ -129,38 +129,37 @@ public class ProxyRequestHandler {
                 return;
             }
 
-            // 普通 HTTP 响应
-            if (body != null && body.length > 0) {
-                ByteBuf content = clientCtx.channel().alloc().buffer(body.length);
-                content.writeBytes(body);
-                FullHttpResponse response = new DefaultFullHttpResponse(
-                        HttpVersion.HTTP_1_1,
-                        HttpResponseStatus.valueOf(statusCode),
-                        content
-                );
+            boolean headersSent = connectionManager.isHeadersSent(msgId);
 
-                if (headers != null) {
-                    headers.forEach(response.headers()::set);
-                }
-
-                if (finished) {
-                    response.headers().set(HttpHeaderNames.CONTENT_LENGTH, body.length);
-                } else {
-                    response.headers().set(HttpHeaderNames.TRANSFER_ENCODING, HttpHeaderValues.CHUNKED);
-                }
-
-                clientCtx.writeAndFlush(response);
-            } else if (finished) {
-                FullHttpResponse response = new DefaultFullHttpResponse(
+            // 流式传输：首次发送响应头 + 内容，后续只发送内容
+            if (!headersSent) {
+                // 第一次发送：发送响应头
+                HttpResponse response = new DefaultHttpResponse(
                         HttpVersion.HTTP_1_1,
                         HttpResponseStatus.valueOf(statusCode)
                 );
+
                 if (headers != null) {
                     headers.forEach(response.headers()::set);
                 }
-                clientCtx.writeAndFlush(response);
+                // 设置 Transfer-Encoding: chunked
+                response.headers().set(HttpHeaderNames.TRANSFER_ENCODING, HttpHeaderValues.CHUNKED);
+
+                clientCtx.write(response);
+                connectionManager.setHeadersSent(msgId, statusCode, headers);
+                log.debug("发送响应头: msgId={}, statusCode={}", msgId, statusCode);
             }
 
+            // 发送内容块
+            if (body != null && body.length > 0) {
+                ByteBuf content = clientCtx.channel().alloc().buffer(body.length);
+                content.writeBytes(body);
+                HttpContent httpContent = new DefaultHttpContent(content);
+                clientCtx.write(httpContent);
+                log.debug("发送数据块: msgId={}, len={}", msgId, body.length);
+            }
+
+            // 如果完成，发送结束标记
             if (finished) {
                 clientCtx.writeAndFlush(LastHttpContent.EMPTY_LAST_CONTENT);
                 // CONNECT 隧道不删除 pending request，等待后续 tunnel_data
@@ -168,6 +167,9 @@ public class ProxyRequestHandler {
                     connectionManager.removePendingRequest(msgId);
                 }
                 log.info("HTTP响应完成: msgId={}", msgId);
+            } else {
+                // 确保数据被刷新
+                clientCtx.flush();
             }
         } catch (Exception e) {
             log.error("发送HTTP响应失败: {}", msgId, e);

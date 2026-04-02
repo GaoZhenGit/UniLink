@@ -85,14 +85,29 @@ public class RealHttpClient {
                 byte[] chunk = new byte[bytesRead];
                 System.arraycopy(buffer, 0, chunk, 0, bytesRead);
 
-                boolean finished = is.available() == 0;
+                // 尝试读取更多数据来判断是否结束（非阻塞探测）
+                // 注意：不使用 available()，而是尝试读取下一个字节
+                is.mark(1);
+                int nextByte = is.read();
+                boolean finished;
+                if (nextByte == -1) {
+                    // 真正到达流末尾
+                    finished = true;
+                } else {
+                    // 还有数据，把读到的字节放回去
+                    is.reset();
+                    finished = false;
+                }
 
                 // 发送响应头
                 Map<String, Object> responseMap = new HashMap<>();
                 responseMap.put("msgId", msgId);
                 responseMap.put("type", "http_chunk");
-                responseMap.put("statusCode", statusCode);
-                responseMap.put("headers", responseHeaders);
+                // 只在第一个 chunk 发送 statusCode 和 headers
+                if (chunkIndex == 0) {
+                    responseMap.put("statusCode", statusCode);
+                    responseMap.put("headers", responseHeaders);
+                }
                 responseMap.put("chunkIndex", chunkIndex++);
                 responseMap.put("bodyLen", chunk.length);
                 responseMap.put("finished", finished);
@@ -102,6 +117,20 @@ public class RealHttpClient {
                 wsClient.sendBinaryMessage(chunk);
 
                 if (finished) break;
+            }
+
+            // 处理空响应体的情况
+            if (chunkIndex == 0) {
+                Map<String, Object> responseMap = new HashMap<>();
+                responseMap.put("msgId", msgId);
+                responseMap.put("type", "http_chunk");
+                responseMap.put("statusCode", statusCode);
+                responseMap.put("headers", responseHeaders);
+                responseMap.put("chunkIndex", 0);
+                responseMap.put("bodyLen", 0);
+                responseMap.put("finished", true);
+                wsClient.sendMessage(new com.fasterxml.jackson.databind.ObjectMapper()
+                        .writeValueAsString(responseMap));
             }
 
             log.info("HTTP请求完成: {} {} -> {}", method, url, statusCode);
