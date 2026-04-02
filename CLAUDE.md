@@ -158,3 +158,5 @@ curl -x http://localhost:8888 -U admin:password123 -v http://httpbin.org/get
 # HTTPS 测试
 curl -x http://localhost:8888 -U admin:password123 -v https://httpbin.org/get
 ```
+## 注意事项
+- 如果没有要求，无需启动服务测试
