@@ -28,13 +28,10 @@
 ## 构建与启动
 
 ### 构建
-
 ```bash
 mvn clean package -DskipTests
 ```
-
 ### 停止已有进程
-
 **Windows (PowerShell):**
 ```powershell
 # 查找并结束 proxy 进程
@@ -43,32 +40,26 @@ jps -l | Select-String unilink-proxy | ForEach-Object { ($_ -split '\s+')[0] } |
 # 查找并结束 worker 进程
 jps -l | Select-String unilink-worker | ForEach-Object { ($_ -split '\s+')[0] } | ForEach-Object { Stop-Process -Id $_ -Force -ErrorAction SilentlyContinue }
 ```
-
 **Linux:**
 ```bash
 # 查找并结束 proxy 进程
 jps -l | grep unilink-proxy | awk '{print $1}' | xargs -r kill -9
-
 # 查找并结束 worker 进程
 jps -l | grep unilink-worker | awk '{print $1}' | xargs -r kill -9
 ```
 
 ### 后台启动
-
 **Windows (PowerShell):**
 ```powershell
 # 启动 proxy (后台)
-Start-Process java -ArgumentList "-jar", "unilink-proxy\target\unilink-proxy-1.0.0.jar"
-
+Start-Process java -ArgumentList "-Dfile.encoding=GBK", "-jar", "unilink-proxy\target\unilink-proxy-1.0.0.jar"
 # 启动 worker (后台)
-Start-Process java -ArgumentList "-jar", "unilink-worker\target\unilink-worker-1.0.0.jar"
+Start-Process java -ArgumentList "-Dfile.encoding=GBK", "-jar", "unilink-worker\target\unilink-worker-1.0.0.jar"
 ```
-
 **Linux:**
 ```bash
 # 启动 proxy (后台)
 nohup java -jar unilink-proxy/target/unilink-proxy-1.0.0.jar > /dev/null 2>&1 &
-
 # 启动 worker (后台)
 nohup java -jar unilink-worker/target/unilink-worker-1.0.0.jar > /dev/null 2>&1 &
 ```
