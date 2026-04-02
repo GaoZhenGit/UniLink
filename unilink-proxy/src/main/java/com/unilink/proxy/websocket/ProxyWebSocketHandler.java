@@ -107,12 +107,18 @@ public class ProxyWebSocketHandler extends TextWebSocketFrameHandler {
         }
 
         // 获取当前正在处理的HTTP响应，发送 body 部分
-        String currentMsgId = getCurrentMsgId();
-        if (currentMsgId != null && body.length > 0) {
+        String msgId = getCurrentMsgId();
+        if (msgId != null) {
             String msgType = getCurrentMsgType();
             boolean isFinished = "http_chunk".equals(msgType) ? isChunkFinished() : chunkFinished;
-            requestHandler.sendResponse(currentMsgId, getCurrentStatusCode(),
-                    getCurrentHeaders(), body, isFinished);
+
+            // 发送响应（即使body为空也要发送，确保finished标志被处理）
+            requestHandler.sendResponse(msgId, getCurrentStatusCode(),
+                    getCurrentHeaders(), body.length > 0 ? body : null, isFinished);
+
+            if (isFinished) {
+                clearCurrentContext();
+            }
         }
     }
 
@@ -158,11 +164,16 @@ public class ProxyWebSocketHandler extends TextWebSocketFrameHandler {
     private void handleHttpResponse(Map<String, Object> msg) throws Exception {
         currentMsgId = (String) msg.get("msgId");
         currentMsgType = (String) msg.get("type");
-        currentStatusCode = ((Number) msg.get("statusCode")).intValue();
 
-        @SuppressWarnings("unchecked")
-        Map<String, String> headers = (Map<String, String>) msg.get("headers");
-        currentHeaders = headers;
+        // statusCode 和 headers 只在第一个 chunk 中存在
+        if (msg.get("statusCode") != null) {
+            currentStatusCode = ((Number) msg.get("statusCode")).intValue();
+        }
+        if (msg.get("headers") != null) {
+            @SuppressWarnings("unchecked")
+            Map<String, String> headers = (Map<String, String>) msg.get("headers");
+            currentHeaders = headers;
+        }
 
         currentBodyLen = msg.get("bodyLen") != null ? ((Number) msg.get("bodyLen")).intValue() : 0;
         chunkFinished = msg.get("finished") != null && (Boolean) msg.get("finished");
