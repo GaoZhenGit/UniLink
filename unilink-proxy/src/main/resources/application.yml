@@ -1,5 +1,5 @@
 server:
-  port: 8082
+  port: ${SERVER_PORT:8082}
 
 logging:
   file:
@@ -11,13 +11,13 @@ logging:
 
 proxy:
   http:
-    port: 8888
+    port: ${PROXY_HTTP_PORT:8888}
     basic-auth:
-      enabled: true
-      username: admin
-      password: password123
+      enabled: ${PROXY_HTTP_BASIC_AUTH_ENABLED:true}
+      username: ${PROXY_HTTP_BASIC_AUTH_USERNAME:client}
+      password: ${PROXY_HTTP_BASIC_AUTH_PASSWORD:Nonghang5354}
   websocket:
-    port: 8889
-    ws-path: /ws
-    heartbeat-interval: 30
-    heartbeat-timeout: 60
+    port: ${PROXY_WEBSOCKET_PORT:8889}
+    ws-path: ${PROXY_WEBSOCKET_WS_PATH:/unilink}
+    heartbeat-interval: ${PROXY_WEBSOCKET_HEARTBEAT_INTERVAL:30}
+    heartbeat-timeout: ${PROXY_WEBSOCKET_HEARTBEAT_TIMEOUT:60}
