@@ -14,10 +14,10 @@ logging:
 
 worker:
   server:
-    host: ${WORKER_SERVER_HOST:usee-uavp-dev.test.abchina.com.cn}
-    port: ${WORKER_SERVER_PORT:443}
+    host: ${WORKER_SERVER_HOST:127.0.0.1}
+    port: ${WORKER_SERVER_PORT:8889}
     ws-path: ${WORKER_SERVER_WS_PATH:/unilink}
-    ssl: ${WORKER_SERVER_SSL:true}
+    ssl: ${WORKER_SERVER_SSL:false}
     auto-reconnect: ${WORKER_SERVER_AUTO_RECONNECT:true}
   reconnect:
     initial-delay: ${WORKER_RECONNECT_INITIAL_DELAY:1000}
