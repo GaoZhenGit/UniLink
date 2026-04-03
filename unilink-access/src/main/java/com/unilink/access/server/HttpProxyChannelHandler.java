@@ -48,7 +48,7 @@ public class HttpProxyChannelHandler extends SimpleChannelInboundHandler<FullHtt
 
     private void handleConnect(ChannelHandlerContext ctx, FullHttpRequest request) {
         String host = request.uri();
-        log.info("收到CONNECT请求: {}", host);
+        log.debug("收到CONNECT请求: {}", host);
 
         requestHandler.handleHttpRequest(ctx, request);
 
@@ -59,7 +59,7 @@ public class HttpProxyChannelHandler extends SimpleChannelInboundHandler<FullHtt
     }
 
     private void switchToTunnelMode(ChannelHandlerContext ctx, String host, String msgId) {
-        log.info("CONNECT隧道建立成功，切换到转发模式: {}", host);
+        log.debug("CONNECT隧道建立成功，切换到转发模式: {}", host);
 
         ctx.channel().eventLoop().execute(() -> {
             try {
@@ -74,7 +74,7 @@ public class HttpProxyChannelHandler extends SimpleChannelInboundHandler<FullHtt
 
                 pipeline.addLast(new TunnelDataForwardHandler(requestHandler, msgId));
 
-                log.info("隧道模式已就绪: msgId={}", msgId);
+                log.debug("隧道模式已就绪: msgId={}", msgId);
             } catch (Exception e) {
                 log.error("切换到隧道模式失败", e);
                 ctx.close();
@@ -109,7 +109,7 @@ public class HttpProxyChannelHandler extends SimpleChannelInboundHandler<FullHtt
                 return true;
             }
         } catch (Exception e) {
-            log.warn("Basic Auth解析失败", e);
+            log.warn("Basic Auth解析失败: {}", e.getMessage());
         }
 
         sendUnauthorized(ctx);
@@ -154,7 +154,7 @@ public class HttpProxyChannelHandler extends SimpleChannelInboundHandler<FullHtt
 
         @Override
         public void channelInactive(ChannelHandlerContext ctx) {
-            log.info("客户端连接断开，关闭隧道: {}", msgId);
+            log.debug("客户端连接断开，关闭隧道: {}", msgId);
         }
 
         @Override

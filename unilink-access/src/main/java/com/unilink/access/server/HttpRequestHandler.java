@@ -65,7 +65,7 @@ public class HttpRequestHandler {
             }
 
             if (!wsClient.isConnected()) {
-                log.warn("WebSocket未连接到Proxy");
+                log.error("WebSocket未连接到Proxy");
                 sendErrorResponse(clientCtx, HttpResponseStatus.BAD_GATEWAY, "Not connected to proxy");
                 pendingRequestManager.removePendingRequest(msgId);
                 return;
@@ -74,7 +74,7 @@ public class HttpRequestHandler {
             wsClient.sendMessage(jsonHeader, bodyLen > 0 ? body : null);
             log.info("HTTP请求已转发给Proxy: {} {} (msgId={})", method, url, msgId);
         } catch (Exception e) {
-            log.error("转发HTTP请求失败", e);
+            log.error("转发HTTP请求失败: {} {}", msgId, e.getMessage());
             sendErrorResponse(clientCtx, HttpResponseStatus.INTERNAL_SERVER_ERROR, e.getMessage());
             pendingRequestManager.removePendingRequest(msgId);
         }
@@ -86,7 +86,7 @@ public class HttpRequestHandler {
 
     public void registerConnectCallback(String msgId, Runnable callback) {
         connectCallbacks.put(msgId, callback);
-        log.info("已注册CONNECT回调: {}", msgId);
+        log.debug("已注册CONNECT回调: {}", msgId);
     }
 
     public void sendResponse(String msgId, int statusCode, Map<String, String> headers, byte[] body, boolean finished) {
@@ -106,7 +106,7 @@ public class HttpRequestHandler {
                         HttpResponseStatus.OK
                 );
                 clientCtx.writeAndFlush(response);
-                log.info("CONNECT隧道响应已发送到客户端: msgId={}", msgId);
+                log.debug("CONNECT隧道响应已发送到客户端: msgId={}", msgId);
 
                 Runnable callback = connectCallbacks.remove(msgId);
                 if (callback != null) {
@@ -146,7 +146,7 @@ public class HttpRequestHandler {
                 if (!isConnect) {
                     pendingRequestManager.removePendingRequest(msgId);
                 }
-                log.info("HTTP响应完成: msgId={}", msgId);
+                log.debug("HTTP响应完成: msgId={}", msgId);
             } else {
                 clientCtx.flush();
             }
