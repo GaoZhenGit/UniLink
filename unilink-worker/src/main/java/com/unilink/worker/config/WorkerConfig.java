@@ -17,6 +17,7 @@ public class WorkerConfig {
         private String wsPath = "/ws";
         private boolean ssl = false;
         private boolean autoReconnect = true;
+        private int heartbeatInterval = 30;
 
         public String getHost() { return host; }
         public void setHost(String host) { this.host = host; }
@@ -28,6 +29,8 @@ public class WorkerConfig {
         public void setSsl(boolean ssl) { this.ssl = ssl; }
         public boolean isAutoReconnect() { return autoReconnect; }
         public void setAutoReconnect(boolean autoReconnect) { this.autoReconnect = autoReconnect; }
+        public int getHeartbeatInterval() { return heartbeatInterval; }
+        public void setHeartbeatInterval(int heartbeatInterval) { this.heartbeatInterval = heartbeatInterval; }
 
         public String getUrl() {
             String scheme = ssl ? "wss://" : "ws://";

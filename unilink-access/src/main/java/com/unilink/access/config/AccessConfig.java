@@ -8,7 +8,7 @@ import org.springframework.context.annotation.Configuration;
 public class AccessConfig {
 
     private Http http = new Http();
-    private Proxy proxy = new Proxy();
+    private Server server = new Server();
 
     public static class Http {
         private int port = 8888;
@@ -33,7 +33,7 @@ public class AccessConfig {
         public void setPassword(String password) { this.password = password; }
     }
 
-    public static class Proxy {
+    public static class Server {
         private String host = "localhost";
         private int port = 8889;
         private String wsPath = "/access";
@@ -70,6 +70,6 @@ public class AccessConfig {
 
     public Http getHttp() { return http; }
     public void setHttp(Http http) { this.http = http; }
-    public Proxy getProxy() { return proxy; }
-    public void setProxy(Proxy proxy) { this.proxy = proxy; }
+    public Server getServer() { return server; }
+    public void setServer(Server server) { this.server = server; }
 }

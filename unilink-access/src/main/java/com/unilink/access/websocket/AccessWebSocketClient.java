@@ -66,7 +66,7 @@ public class AccessWebSocketClient {
                     connected.set(true);
                     AccessWebSocketClient.this.session = session;
                     log.info("已连接到代理服务器");
-                    currentRetryDelay = config.getProxy().getReconnect().getInitialDelay();
+                    currentRetryDelay = config.getServer().getReconnect().getInitialDelay();
                     startHeartbeat();
                     latch.countDown();
                 }
@@ -110,12 +110,12 @@ public class AccessWebSocketClient {
     }
 
     private String buildWebSocketUrl() {
-        String scheme = config.getProxy().isSsl() ? "wss" : "ws";
+        String scheme = config.getServer().isSsl() ? "wss" : "ws";
         return String.format("%s://%s:%d%s",
                 scheme,
-                config.getProxy().getHost(),
-                config.getProxy().getPort(),
-                config.getProxy().getWsPath());
+                config.getServer().getHost(),
+                config.getServer().getPort(),
+                config.getServer().getWsPath());
     }
 
     @PreDestroy
@@ -139,8 +139,8 @@ public class AccessWebSocketClient {
     }
 
     private void scheduleReconnect() {
-        if (currentRetryDelay < config.getProxy().getReconnect().getInitialDelay()) {
-            currentRetryDelay = config.getProxy().getReconnect().getInitialDelay();
+        if (currentRetryDelay < config.getServer().getReconnect().getInitialDelay()) {
+            currentRetryDelay = config.getServer().getReconnect().getInitialDelay();
         }
         if (reconnectScheduler != null) {
             reconnectScheduler.shutdown();
@@ -149,8 +149,8 @@ public class AccessWebSocketClient {
         log.info("将在 {}ms 后尝试重连", currentRetryDelay);
         reconnectScheduler.schedule(() -> connect(), currentRetryDelay, TimeUnit.MILLISECONDS);
         currentRetryDelay = (int) Math.min(
-                currentRetryDelay * config.getProxy().getReconnect().getMultiplier(),
-                config.getProxy().getReconnect().getMaxDelay()
+                currentRetryDelay * config.getServer().getReconnect().getMultiplier(),
+                config.getServer().getReconnect().getMaxDelay()
         );
     }
 
@@ -161,7 +161,7 @@ public class AccessWebSocketClient {
     }
 
     private void startHeartbeat() {
-        int interval = config.getProxy().getHeartbeatInterval();
+        int interval = config.getServer().getHeartbeatInterval();
         heartbeatScheduler = Executors.newSingleThreadScheduledExecutor();
         heartbeatScheduler.scheduleAtFixedRate(() -> {
             if (connected.get() && session != null && session.isOpen()) {

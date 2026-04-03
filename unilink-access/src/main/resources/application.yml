@@ -19,12 +19,12 @@ access:
       enabled: ${ACCESS_HTTP_BASIC_AUTH_ENABLED:true}
       username: ${ACCESS_HTTP_BASIC_AUTH_USERNAME:admin}
       password: ${ACCESS_HTTP_BASIC_AUTH_PASSWORD:password123}
-  proxy:
-    host: ${ACCESS_PROXY_HOST:localhost}
-    port: ${ACCESS_PROXY_PORT:8889}
-    ws-path: ${ACCESS_PROXY_WS_PATH:/access}
-    ssl: ${ACCESS_PROXY_SSL:false}
-    heartbeat-interval: ${ACCESS_PROXY_HEARTBEAT_INTERVAL:30}
+  server:
+    host: ${ACCESS_SERVER_HOST:localhost}
+    port: ${ACCESS_SERVER_PORT:8889}
+    ws-path: ${ACCESS_SERVER_WS_PATH:/access}
+    ssl: ${ACCESS_SERVER_SSL:false}
+    heartbeat-interval: ${ACCESS_SERVER_HEARTBEAT_INTERVAL:30}
     reconnect:
       initial-delay: ${ACCESS_RECONNECT_INITIAL_DELAY:1000}
       max-delay: ${ACCESS_RECONNECT_MAX_DELAY:60000}
