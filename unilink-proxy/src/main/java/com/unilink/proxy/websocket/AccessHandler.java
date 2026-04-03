@@ -47,7 +47,7 @@ public class AccessHandler extends TextWebSocketFrameHandler {
 
     @Override
     public void channelInactive(ChannelHandlerContext ctx) {
-        log.info("Access WebSocket连接断开");
+        log.info("Access WebSocket连接断开: {}", ctx.channel().remoteAddress());
         sessionRouter.unregisterAccess(ctx.channel());
         stopHeartbeat(ctx);
     }

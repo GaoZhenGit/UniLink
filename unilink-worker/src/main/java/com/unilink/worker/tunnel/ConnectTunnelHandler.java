@@ -144,7 +144,7 @@ public class ConnectTunnelHandler {
             try {
                 ctx.targetChannel.close();
             } catch (IOException ignored) {}
-            log.info("CONNECT隧道已关闭: {}", msgId);
+            log.debug("CONNECT隧道已关闭: {}", msgId);
         }
     }
 

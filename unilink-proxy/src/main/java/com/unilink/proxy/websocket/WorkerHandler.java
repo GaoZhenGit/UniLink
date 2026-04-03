@@ -47,7 +47,7 @@ public class WorkerHandler extends TextWebSocketFrameHandler {
 
     @Override
     public void channelInactive(ChannelHandlerContext ctx) {
-        log.info("Worker WebSocket连接断开");
+        log.info("Worker WebSocket连接断开: {}", ctx.channel().remoteAddress());
         sessionRouter.unregisterWorker(ctx.channel());
         stopHeartbeat(ctx);
     }
