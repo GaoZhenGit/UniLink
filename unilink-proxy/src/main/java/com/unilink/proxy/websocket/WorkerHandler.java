@@ -2,6 +2,7 @@ package com.unilink.proxy.websocket;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.unilink.proxy.config.ProxyConfig;
+import com.unilink.proxy.manager.AccessHistoryManager;
 import com.unilink.proxy.manager.SessionRouter;
 import io.netty.channel.ChannelHandler;
 import io.netty.channel.ChannelHandlerContext;
@@ -15,6 +16,7 @@ import org.springframework.stereotype.Component;
 
 import java.util.HashMap;
 import java.util.Map;
+import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.Executors;
 import java.util.concurrent.ScheduledExecutorService;
 import java.util.concurrent.TimeUnit;
@@ -37,6 +39,12 @@ public class WorkerHandler extends TextWebSocketFrameHandler {
 
     @Autowired
     private ProxyConfig config;
+
+    @Autowired
+    private AccessHistoryManager historyManager;
+
+    // 待处理的请求上下文: msgId -> requestInfo
+    private final Map<String, Map<String, Object>> pendingRequests = new ConcurrentHashMap<>();
 
     @Override
     public void channelActive(ChannelHandlerContext ctx) {
@@ -61,6 +69,10 @@ public class WorkerHandler extends TextWebSocketFrameHandler {
         String type = (String) msg.get("type");
 
         switch (type) {
+            case "register":
+                String workerId = (String) msg.get("workerId");
+                sessionRouter.registerWorker(ctx.channel(), workerId);
+                break;
             case "heartbeat":
                 handleHeartbeat(ctx, msg);
                 break;
@@ -68,11 +80,40 @@ public class WorkerHandler extends TextWebSocketFrameHandler {
                 log.debug("收到Worker心跳响应");
                 break;
             case "http_response":
+                // 记录访问历史（仅在 finished 时）
+                String respMsgId = (String) msg.get("msgId");
+                Boolean finished = msg.get("finished") != null ? (Boolean) msg.get("finished") : false;
+                if (finished && respMsgId != null) {
+                    Map<String, Object> requestInfo = pendingRequests.remove(respMsgId);
+                    if (requestInfo != null) {
+                        String accessId = (String) requestInfo.get("accessId");
+                        String url = (String) requestInfo.get("url");
+                        int statusCode = msg.get("statusCode") != null ? ((Number) msg.get("statusCode")).intValue() : 200;
+                        boolean success = statusCode >= 200 && statusCode < 400;
+                        historyManager.recordAccess(accessId, url, statusCode, success);
+                    }
+                }
+                // 标记下一帧二进制数据需要转发
+                int respBodyLen = msg.get("bodyLen") != null ? ((Number) msg.get("bodyLen")).intValue() : 0;
+                if (respBodyLen > 0) {
+                    sessionRouter.setPendingBinaryTarget(ctx.channel().id().asShortText(), "toAccess");
+                }
+                // 转发到 access
+                sessionRouter.forwardTextToAccess(ctx.channel(), text);
+                break;
             case "http_chunk":
+                // 标记下一帧二进制数据需要转发
+                int chunkBodyLen = msg.get("bodyLen") != null ? ((Number) msg.get("bodyLen")).intValue() : 0;
+                if (chunkBodyLen > 0) {
+                    sessionRouter.setPendingBinaryTarget(ctx.channel().id().asShortText(), "toAccess");
+                }
+                // 转发到 access
+                sessionRouter.forwardTextToAccess(ctx.channel(), text);
+                break;
             case "tunnel_data":
                 // 标记下一帧二进制数据需要转发
-                int bodyLen = msg.get("bodyLen") != null ? ((Number) msg.get("bodyLen")).intValue() : 0;
-                if (bodyLen > 0) {
+                int tunnelBodyLen = msg.get("bodyLen") != null ? ((Number) msg.get("bodyLen")).intValue() : 0;
+                if (tunnelBodyLen > 0) {
                     sessionRouter.setPendingBinaryTarget(ctx.channel().id().asShortText(), "toAccess");
                 }
                 // 转发到 access

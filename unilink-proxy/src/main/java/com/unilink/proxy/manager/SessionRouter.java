@@ -8,6 +8,9 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.stereotype.Component;
 
+import java.util.ArrayList;
+import java.util.HashMap;
+import java.util.List;
 import java.util.Map;
 import java.util.concurrent.ConcurrentHashMap;
 
@@ -22,8 +25,20 @@ public class SessionRouter {
     // access 连接池: channelId -> channel
     private final Map<String, Channel> accessChannels = new ConcurrentHashMap<>();
 
+    // accessId -> channelId 的映射
+    private final Map<String, String> accessIdToChannelId = new ConcurrentHashMap<>();
+
+    // channelId -> accessId 的映射
+    private final Map<String, String> channelIdToAccessId = new ConcurrentHashMap<>();
+
     // worker 连接池: channelId -> channel
     private final Map<String, Channel> workerChannels = new ConcurrentHashMap<>();
+
+    // workerId -> channelId 的映射
+    private final Map<String, String> workerIdToChannelId = new ConcurrentHashMap<>();
+
+    // channelId -> workerId 的映射
+    private final Map<String, String> channelIdToWorkerId = new ConcurrentHashMap<>();
 
     // access-worker 绑定关系
     private final Map<String, String> accessToWorker = new ConcurrentHashMap<>();
@@ -36,53 +51,97 @@ public class SessionRouter {
     private int roundRobinIndex = 0;
 
     /**
-     * 注册 access 连接
+     * 注册 access 连接（不带 ID）
      */
     public void registerAccess(Channel channel) {
-        String accessId = getChannelId(channel);
-        accessChannels.put(accessId, channel);
-        log.info("Access连接注册: {}, 当前数量: {}", accessId, accessChannels.size());
+        registerAccess(channel, null);
+    }
+
+    /**
+     * 注册 access 连接（带 ID）
+     */
+    public void registerAccess(Channel channel, String accessId) {
+        String channelId = getChannelId(channel);
+        accessChannels.put(channelId, channel);
+
+        if (accessId != null && !accessId.isEmpty()) {
+            accessIdToChannelId.put(accessId, channelId);
+            channelIdToAccessId.put(channelId, accessId);
+            log.info("Access连接注册: accessId={}, channelId={}, 当前数量={}", accessId, channelId, accessChannels.size());
+        } else {
+            log.info("Access连接注册: channelId={}, 当前数量={}", channelId, accessChannels.size());
+        }
     }
 
     /**
      * 移除 access 连接
      */
     public void unregisterAccess(Channel channel) {
-        String accessId = getChannelId(channel);
-        accessChannels.remove(accessId);
+        String channelId = getChannelId(channel);
+        accessChannels.remove(channelId);
 
-        // 解除绑定
-        String workerId = accessToWorker.remove(accessId);
-        if (workerId != null) {
-            workerToAccess.remove(workerId);
+        // 清除 ID 映射
+        String accessId = channelIdToAccessId.remove(channelId);
+        if (accessId != null) {
+            accessIdToChannelId.remove(accessId);
         }
 
-        log.info("Access连接断开: {}, 当前数量: {}", accessId, accessChannels.size());
+        // 解除绑定
+        if (accessId != null) {
+            String workerId = accessToWorker.remove(accessId);
+            if (workerId != null) {
+                workerToAccess.remove(workerId);
+            }
+        }
+
+        log.info("Access连接断开: channelId={}, 当前数量={}", channelId, accessChannels.size());
     }
 
     /**
-     * 注册 worker 连接
+     * 注册 worker 连接（不带 ID）
      */
     public void registerWorker(Channel channel) {
-        String workerId = getChannelId(channel);
-        workerChannels.put(workerId, channel);
-        log.info("Worker连接注册: {}, 当前数量: {}", workerId, workerChannels.size());
+        registerWorker(channel, null);
+    }
+
+    /**
+     * 注册 worker 连接（带 ID）
+     */
+    public void registerWorker(Channel channel, String workerId) {
+        String channelId = getChannelId(channel);
+        workerChannels.put(channelId, channel);
+
+        if (workerId != null && !workerId.isEmpty()) {
+            workerIdToChannelId.put(workerId, channelId);
+            channelIdToWorkerId.put(channelId, workerId);
+            log.info("Worker连接注册: workerId={}, channelId={}, 当前数量={}", workerId, channelId, workerChannels.size());
+        } else {
+            log.info("Worker连接注册: channelId={}, 当前数量={}", channelId, workerChannels.size());
+        }
     }
 
     /**
      * 移除 worker 连接
      */
     public void unregisterWorker(Channel channel) {
-        String workerId = getChannelId(channel);
-        workerChannels.remove(workerId);
+        String channelId = getChannelId(channel);
+        workerChannels.remove(channelId);
 
-        // 解除绑定
-        String accessId = workerToAccess.remove(workerId);
-        if (accessId != null) {
-            accessToWorker.remove(accessId);
+        // 清除 ID 映射
+        String workerId = channelIdToWorkerId.remove(channelId);
+        if (workerId != null) {
+            workerIdToChannelId.remove(workerId);
         }
 
-        log.info("Worker连接断开: {}, 当前数量: {}", workerId, workerChannels.size());
+        // 解除绑定
+        if (workerId != null) {
+            String accessId = workerToAccess.remove(workerId);
+            if (accessId != null) {
+                accessToWorker.remove(accessId);
+            }
+        }
+
+        log.info("Worker连接断开: channelId={}, 当前数量={}", channelId, workerChannels.size());
     }
 
     /**
@@ -223,5 +282,83 @@ public class SessionRouter {
 
     public int getWorkerCount() {
         return workerChannels.size();
+    }
+
+    public String getAccessIdByChannel(String channelId) {
+        return channelIdToAccessId.get(channelId);
+    }
+
+    public String getWorkerIdByChannel(String channelId) {
+        return channelIdToWorkerId.get(channelId);
+    }
+
+    public Map<String, Object> getAccessInfo(String accessId) {
+        String channelId = accessIdToChannelId.get(accessId);
+        if (channelId == null) {
+            return null;
+        }
+        Channel channel = accessChannels.get(channelId);
+        if (channel == null) {
+            return null;
+        }
+        Map<String, Object> info = new HashMap<>();
+        info.put("id", accessId);
+        info.put("channelId", channelId);
+        info.put("remoteAddress", channel.remoteAddress().toString());
+        info.put("active", channel.isActive());
+        return info;
+    }
+
+    public Map<String, Object> getWorkerInfo(String workerId) {
+        String channelId = workerIdToChannelId.get(workerId);
+        if (channelId == null) {
+            return null;
+        }
+        Channel channel = workerChannels.get(channelId);
+        if (channel == null) {
+            return null;
+        }
+        Map<String, Object> info = new HashMap<>();
+        info.put("id", workerId);
+        info.put("channelId", channelId);
+        info.put("remoteAddress", channel.remoteAddress().toString());
+        info.put("active", channel.isActive());
+        return info;
+    }
+
+    public List<Map<String, Object>> getAccessList() {
+        List<Map<String, Object>> list = new ArrayList<>();
+        for (Map.Entry<String, String> entry : accessIdToChannelId.entrySet()) {
+            String accessId = entry.getKey();
+            String channelId = entry.getValue();
+            Channel channel = accessChannels.get(channelId);
+            if (channel != null) {
+                Map<String, Object> info = new HashMap<>();
+                info.put("id", accessId);
+                info.put("channelId", channelId);
+                info.put("remoteAddress", channel.remoteAddress().toString());
+                info.put("active", channel.isActive());
+                list.add(info);
+            }
+        }
+        return list;
+    }
+
+    public List<Map<String, Object>> getWorkerList() {
+        List<Map<String, Object>> list = new ArrayList<>();
+        for (Map.Entry<String, String> entry : workerIdToChannelId.entrySet()) {
+            String workerId = entry.getKey();
+            String channelId = entry.getValue();
+            Channel channel = workerChannels.get(channelId);
+            if (channel != null) {
+                Map<String, Object> info = new HashMap<>();
+                info.put("id", workerId);
+                info.put("channelId", channelId);
+                info.put("remoteAddress", channel.remoteAddress().toString());
+                info.put("active", channel.isActive());
+                list.add(info);
+            }
+        }
+        return list;
     }
 }

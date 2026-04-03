@@ -69,6 +69,7 @@ public class AccessWebSocketClient {
                     connected.set(true);
                     AccessWebSocketClient.this.session = session;
                     log.info("已连接到代理服务器");
+                    sendRegisterMessage();
                     currentRetryDelay = config.getReconnect().getInitialDelay();
                     startHeartbeat();
                     latch.countDown();
@@ -185,6 +186,20 @@ public class AccessWebSocketClient {
     private void stopHeartbeat() {
         if (heartbeatScheduler != null) {
             heartbeatScheduler.shutdown();
+        }
+    }
+
+    private void sendRegisterMessage() {
+        try {
+            Map<String, Object> registerMsg = new HashMap<>();
+            registerMsg.put("type", "register");
+            registerMsg.put("accessId", accessConfig.getId());
+            registerMsg.put("timestamp", System.currentTimeMillis());
+            String json = objectMapper.writeValueAsString(registerMsg);
+            sendMessageSync(new TextMessage(json));
+            log.info("已发送注册消息，accessId={}", accessConfig.getId());
+        } catch (Exception e) {
+            log.error("发送注册消息失败", e);
         }
     }
 
