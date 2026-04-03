@@ -16,7 +16,6 @@ import org.springframework.stereotype.Component;
 
 import java.util.HashMap;
 import java.util.Map;
-import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.Executors;
 import java.util.concurrent.ScheduledExecutorService;
 import java.util.concurrent.TimeUnit;
@@ -43,13 +42,10 @@ public class WorkerHandler extends TextWebSocketFrameHandler {
     @Autowired
     private AccessHistoryManager historyManager;
 
-    // 待处理的请求上下文: msgId -> requestInfo
-    private final Map<String, Map<String, Object>> pendingRequests = new ConcurrentHashMap<>();
-
     @Override
     public void channelActive(ChannelHandlerContext ctx) {
         log.info("Worker WebSocket连接建立: {}", ctx.channel().remoteAddress());
-        sessionRouter.registerWorker(ctx.channel());
+        // 不要在这里注册，等收到 register 消息再注册
         startHeartbeat(ctx);
     }
 
@@ -84,7 +80,7 @@ public class WorkerHandler extends TextWebSocketFrameHandler {
                 String respMsgId = (String) msg.get("msgId");
                 Boolean finished = msg.get("finished") != null ? (Boolean) msg.get("finished") : false;
                 if (finished && respMsgId != null) {
-                    Map<String, Object> requestInfo = pendingRequests.remove(respMsgId);
+                    Map<String, Object> requestInfo = sessionRouter.removePendingRequest(respMsgId);
                     if (requestInfo != null) {
                         String accessId = (String) requestInfo.get("accessId");
                         String url = (String) requestInfo.get("url");
@@ -102,6 +98,21 @@ public class WorkerHandler extends TextWebSocketFrameHandler {
                 sessionRouter.forwardTextToAccess(ctx.channel(), text);
                 break;
             case "http_chunk":
+                // 在最后一个 chunk 时写入历史记录
+                Boolean chunkFinished = msg.get("finished") != null ? (Boolean) msg.get("finished") : false;
+                if (chunkFinished) {
+                    String chunkMsgId = (String) msg.get("msgId");
+                    if (chunkMsgId != null) {
+                        Map<String, Object> requestInfo = sessionRouter.removePendingRequest(chunkMsgId);
+                        if (requestInfo != null) {
+                            String accessId = (String) requestInfo.get("accessId");
+                            String url = (String) requestInfo.get("url");
+                            int statusCode = msg.get("statusCode") != null ? ((Number) msg.get("statusCode")).intValue() : 200;
+                            boolean success = statusCode >= 200 && statusCode < 400;
+                            historyManager.recordAccess(accessId, url, statusCode, success);
+                        }
+                    }
+                }
                 // 标记下一帧二进制数据需要转发
                 int chunkBodyLen = msg.get("bodyLen") != null ? ((Number) msg.get("bodyLen")).intValue() : 0;
                 if (chunkBodyLen > 0) {

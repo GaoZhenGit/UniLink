@@ -47,6 +47,9 @@ public class SessionRouter {
     // 待转发的二进制数据上下文
     private final Map<String, String> pendingBinaryTarget = new ConcurrentHashMap<>();
 
+    // 待处理的请求上下文: msgId -> requestInfo (用于历史记录)
+    private final Map<String, Map<String, Object>> pendingRequests = new ConcurrentHashMap<>();
+
     // 轮询索引
     private int roundRobinIndex = 0;
 
@@ -218,6 +221,20 @@ public class SessionRouter {
      */
     public String getAndClearPendingBinaryTarget(String fromChannelId) {
         return pendingBinaryTarget.remove(fromChannelId);
+    }
+
+    /**
+     * 添加待处理的请求上下文
+     */
+    public void addPendingRequest(String msgId, Map<String, Object> requestInfo) {
+        pendingRequests.put(msgId, requestInfo);
+    }
+
+    /**
+     * 获取并移除待处理的请求上下文
+     */
+    public Map<String, Object> removePendingRequest(String msgId) {
+        return pendingRequests.remove(msgId);
     }
 
     /**
