@@ -2,6 +2,7 @@ package com.unilink.worker.client;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.unilink.worker.config.WorkerConfig;
+import com.unilink.worker.config.WorkerProxyConfig;
 import com.unilink.worker.http.RealHttpClient;
 import com.unilink.worker.protocol.MessageHandler;
 import org.slf4j.Logger;
@@ -35,7 +36,7 @@ public class WorkerWebSocketClient {
     private static final ObjectMapper objectMapper = new ObjectMapper();
 
     @Autowired
-    private WorkerConfig config;
+    private WorkerProxyConfig config;
 
     @Autowired
     @Lazy
@@ -57,7 +58,7 @@ public class WorkerWebSocketClient {
 
     @PostConstruct
     public void connect() {
-        String url = config.getServer().getUrl();
+        String url = config.getUrl();
         log.info("连接代理服务器: {}", url);
 
         try {
@@ -130,7 +131,7 @@ public class WorkerWebSocketClient {
     private void onDisconnected() {
         connected.set(false);
         stopHeartbeat();
-        if (config.getServer().isAutoReconnect()) {
+        if (config.isAutoReconnect()) {
             scheduleReconnect();
         }
     }
@@ -159,7 +160,7 @@ public class WorkerWebSocketClient {
     }
 
     private void startHeartbeat() {
-        int interval = config.getServer().getHeartbeatInterval();
+        int interval = config.getHeartbeatInterval();
         heartbeatScheduler = Executors.newSingleThreadScheduledExecutor();
         heartbeatScheduler.scheduleAtFixedRate(() -> {
             if (connected.get() && session != null && session.isOpen()) {

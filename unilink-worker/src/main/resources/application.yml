@@ -12,18 +12,20 @@ logging:
   level:
     com.unilink: DEBUG
 
-worker:
-  server:
-    host: ${WORKER_SERVER_HOST:127.0.0.1}
-    port: ${WORKER_SERVER_PORT:8889}
-    ws-path: ${WORKER_SERVER_WS_PATH:/worker}
-    ssl: ${WORKER_SERVER_SSL:false}
-    auto-reconnect: ${WORKER_SERVER_AUTO_RECONNECT:true}
-    heartbeat-interval: ${WORKER_SERVER_HEARTBEAT_INTERVAL:30}
+# Proxy 连接配置 (与 access 保持一致)
+proxy:
+  host: ${PROXY_HOST:127.0.0.1}
+  port: ${PROXY_PORT:8889}
+  ws-path: ${PROXY_WS_PATH:/worker}
+  ssl: ${PROXY_SSL:false}
+  auto-reconnect: ${PROXY_AUTO_RECONNECT:true}
+  heartbeat-interval: ${PROXY_HEARTBEAT_INTERVAL:30}
   reconnect:
-    initial-delay: ${WORKER_RECONNECT_INITIAL_DELAY:1000}
-    max-delay: ${WORKER_RECONNECT_MAX_DELAY:60000}
-    multiplier: ${WORKER_RECONNECT_MULTIPLIER:2.0}
+    initial-delay: ${PROXY_RECONNECT_INITIAL_DELAY:1000}
+    max-delay: ${PROXY_RECONNECT_MAX_DELAY:60000}
+    multiplier: ${PROXY_RECONNECT_MULTIPLIER:2.0}
+
+worker:
   http:
     connect-timeout: ${WORKER_HTTP_CONNECT_TIMEOUT:30000}
     read-timeout: ${WORKER_HTTP_READ_TIMEOUT:300000}

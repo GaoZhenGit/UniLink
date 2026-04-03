@@ -5,7 +5,7 @@ import org.springframework.context.annotation.Configuration;
 
 @Configuration
 @ConfigurationProperties(prefix = "worker")
-public class WorkerConfig {
+public class WorkerHttpConfig {
 
     private Http http = new Http();
 

@@ -1,7 +1,7 @@
 package com.unilink.worker.http;
 
 import com.unilink.worker.client.WorkerWebSocketClient;
-import com.unilink.worker.config.WorkerConfig;
+import com.unilink.worker.config.WorkerHttpConfig;
 import com.unilink.worker.protocol.MessageHandler;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -22,7 +22,7 @@ public class RealHttpClient {
     private static final Logger log = LoggerFactory.getLogger(RealHttpClient.class);
 
     @Autowired
-    private WorkerConfig config;
+    private WorkerHttpConfig config;
 
     @Autowired
     private WorkerWebSocketClient wsClient;

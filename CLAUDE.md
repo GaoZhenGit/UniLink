@@ -90,16 +90,19 @@ access:
       enabled: true      # 启用 Basic Auth
       username: admin
       password: password123
-  server:
-    host: localhost      # 代理端地址
-    port: 8889           # 代理端 WebSocket 端口
-    ws-path: /access     # WebSocket 路径
-    ssl: false           # 是否使用 wss
-    heartbeat-interval: 30   # 心跳间隔(秒)
-    reconnect:
-      initial-delay: 1000    # 初始重连延迟(ms)
-      max-delay: 60000       # 最大重连延迟(ms)
-      multiplier: 2.0        # 延迟倍数
+
+# 连接 Proxy 的配置 (环境变量: PROXY_*)
+proxy:
+  host: localhost        # 代理端地址
+  port: 8889             # 代理端 WebSocket 端口
+  ws-path: /access       # WebSocket 路径
+  ssl: false             # 是否使用 wss
+  auto-reconnect: true   # 是否自动重连
+  heartbeat-interval: 30 # 心跳间隔(秒)
+  reconnect:
+    initial-delay: 1000  # 初始重连延迟(ms)
+    max-delay: 60000     # 最大重连延迟(ms)
+    multiplier: 2.0      # 延迟倍数
 ```
 
 ### proxy 配置 (application.yml)
@@ -117,18 +120,20 @@ proxy:
 ### worker 配置 (application.yml)
 
 ```yaml
-worker:
-  server:
-    host: 127.0.0.1      # 代理端地址
-    port: 8889           # 代理端 WebSocket 端口
-    ws-path: /worker     # WebSocket 路径
-    ssl: false           # 是否使用 wss
-    auto-reconnect: true # 启用自动重连
-    heartbeat-interval: 30   # 心跳间隔(秒)
+# Proxy 连接配置 (与 access 一致)
+proxy:
+  host: 127.0.0.1        # 代理端地址
+  port: 8889             # 代理端 WebSocket 端口
+  ws-path: /worker       # WebSocket 路径
+  ssl: false             # 是否使用 wss
+  auto-reconnect: true   # 是否自动重连
+  heartbeat-interval: 30 # 心跳间隔(秒)
   reconnect:
     initial-delay: 1000  # 初始重连延迟(ms)
     max-delay: 60000     # 最大重连延迟(ms)
     multiplier: 2.0      # 延迟倍数
+
+worker:
   http:
     connect-timeout: 30000   # 连接超时(ms)
     read-timeout: 300000     # 读取超时(ms)
