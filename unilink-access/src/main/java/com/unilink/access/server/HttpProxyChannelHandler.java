@@ -2,6 +2,7 @@ package com.unilink.access.server;
 
 import com.unilink.access.config.AccessConfig;
 import io.netty.buffer.ByteBuf;
+import io.netty.channel.ChannelHandler;
 import io.netty.channel.*;
 import io.netty.handler.codec.http.*;
 import org.slf4j.Logger;
@@ -15,6 +16,7 @@ import java.util.Map;
 import java.util.concurrent.ConcurrentHashMap;
 
 @Component
+@ChannelHandler.Sharable
 public class HttpProxyChannelHandler extends SimpleChannelInboundHandler<FullHttpRequest> {
 
     private static final Logger log = LoggerFactory.getLogger(HttpProxyChannelHandler.class);
