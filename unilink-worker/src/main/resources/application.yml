@@ -26,6 +26,7 @@ proxy:
     multiplier: ${PROXY_RECONNECT_MULTIPLIER:2.0}
 
 worker:
+  id: ${WORKER_ID:}
   http:
     connect-timeout: ${WORKER_HTTP_CONNECT_TIMEOUT:30000}
     read-timeout: ${WORKER_HTTP_READ_TIMEOUT:300000}

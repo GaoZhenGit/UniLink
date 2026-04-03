@@ -2,6 +2,7 @@ package com.unilink.proxy.websocket;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.unilink.proxy.config.ProxyConfig;
+import com.unilink.proxy.manager.AccessHistoryManager;
 import com.unilink.proxy.manager.SessionRouter;
 import io.netty.channel.ChannelHandler;
 import io.netty.channel.ChannelHandlerContext;
@@ -15,6 +16,7 @@ import org.springframework.stereotype.Component;
 
 import java.util.HashMap;
 import java.util.Map;
+import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.Executors;
 import java.util.concurrent.ScheduledExecutorService;
 import java.util.concurrent.TimeUnit;
@@ -37,6 +39,12 @@ public class AccessHandler extends TextWebSocketFrameHandler {
 
     @Autowired
     private ProxyConfig config;
+
+    @Autowired
+    private AccessHistoryManager historyManager;
+
+    // 待处理的请求上下文: msgId -> requestInfo
+    private final Map<String, Map<String, Object>> pendingRequests = new ConcurrentHashMap<>();
 
     @Override
     public void channelActive(ChannelHandlerContext ctx) {
@@ -61,6 +69,10 @@ public class AccessHandler extends TextWebSocketFrameHandler {
         String type = (String) msg.get("type");
 
         switch (type) {
+            case "register":
+                String accessId = (String) msg.get("accessId");
+                sessionRouter.registerAccess(ctx.channel(), accessId);
+                break;
             case "heartbeat":
                 handleHeartbeat(ctx, msg);
                 break;
@@ -68,10 +80,29 @@ public class AccessHandler extends TextWebSocketFrameHandler {
                 log.debug("收到Access心跳响应");
                 break;
             case "http_request":
-            case "tunnel_data":
+                // 记录待处理请求，用于后续记录历史
+                String msgId = (String) msg.get("msgId");
+                String url = (String) msg.get("url");
+                String reqAccessId = sessionRouter.getAccessIdByChannel(ctx.channel().id().asShortText());
+                if (msgId != null && reqAccessId != null) {
+                    Map<String, Object> requestInfo = new HashMap<>();
+                    requestInfo.put("accessId", reqAccessId);
+                    requestInfo.put("url", url);
+                    requestInfo.put("timestamp", System.currentTimeMillis());
+                    pendingRequests.put(msgId, requestInfo);
+                }
                 // 标记下一帧二进制数据需要转发
                 int bodyLen = msg.get("bodyLen") != null ? ((Number) msg.get("bodyLen")).intValue() : 0;
                 if (bodyLen > 0) {
+                    sessionRouter.setPendingBinaryTarget(ctx.channel().id().asShortText(), "toWorker");
+                }
+                // 转发到 worker
+                sessionRouter.forwardTextToWorker(ctx.channel(), text);
+                break;
+            case "tunnel_data":
+                // 标记下一帧二进制数据需要转发
+                int tunnelBodyLen = msg.get("bodyLen") != null ? ((Number) msg.get("bodyLen")).intValue() : 0;
+                if (tunnelBodyLen > 0) {
                     sessionRouter.setPendingBinaryTarget(ctx.channel().id().asShortText(), "toWorker");
                 }
                 // 转发到 worker

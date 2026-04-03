@@ -7,6 +7,7 @@ import org.springframework.context.annotation.Configuration;
 @ConfigurationProperties(prefix = "access")
 public class AccessConfig {
 
+    private String id;
     private Http http = new Http();
 
     public static class Http {
@@ -34,4 +35,6 @@ public class AccessConfig {
 
     public Http getHttp() { return http; }
     public void setHttp(Http http) { this.http = http; }
+    public String getId() { return id; }
+    public void setId(String id) { this.id = id; }
 }

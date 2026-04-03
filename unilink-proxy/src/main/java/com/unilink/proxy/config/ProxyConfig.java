@@ -8,6 +8,7 @@ import org.springframework.context.annotation.Configuration;
 public class ProxyConfig {
 
     private Websocket websocket = new Websocket();
+    private History history = new History();
 
     public static class Websocket {
         private int port = 8889;
@@ -28,6 +29,18 @@ public class ProxyConfig {
         public void setHeartbeatTimeout(int heartbeatTimeout) { this.heartbeatTimeout = heartbeatTimeout; }
     }
 
+    public static class History {
+        private int maxEntries = 1000;
+        private int maxUrlsPerAccess = 100;
+
+        public int getMaxEntries() { return maxEntries; }
+        public void setMaxEntries(int maxEntries) { this.maxEntries = maxEntries; }
+        public int getMaxUrlsPerAccess() { return maxUrlsPerAccess; }
+        public void setMaxUrlsPerAccess(int maxUrlsPerAccess) { this.maxUrlsPerAccess = maxUrlsPerAccess; }
+    }
+
     public Websocket getWebsocket() { return websocket; }
     public void setWebsocket(Websocket websocket) { this.websocket = websocket; }
+    public History getHistory() { return history; }
+    public void setHistory(History history) { this.history = history; }
 }
