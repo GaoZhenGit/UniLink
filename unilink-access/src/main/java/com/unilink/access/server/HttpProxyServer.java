@@ -1,7 +1,6 @@
-package com.unilink.proxy.server;
+package com.unilink.access.server;
 
-import com.unilink.proxy.config.ProxyConfig;
-import com.unilink.proxy.handler.ProxyRequestHandler;
+import com.unilink.access.config.AccessConfig;
 import io.netty.bootstrap.ServerBootstrap;
 import io.netty.channel.*;
 import io.netty.channel.nio.NioEventLoopGroup;
@@ -22,13 +21,10 @@ public class HttpProxyServer {
     private static final Logger log = LoggerFactory.getLogger(HttpProxyServer.class);
 
     @Autowired
-    private ProxyConfig proxyConfig;
+    private AccessConfig accessConfig;
 
     @Autowired
-    private ProxyRequestHandler requestHandler;
-
-    @Autowired
-    private WorkerConnectionManager connectionManager;
+    private HttpProxyChannelHandler proxyChannelHandler;
 
     private Channel serverChannel;
     private EventLoopGroup bossGroup;
@@ -36,7 +32,7 @@ public class HttpProxyServer {
 
     @PostConstruct
     public void start() {
-        int port = proxyConfig.getHttp().getPort();
+        int port = accessConfig.getHttp().getPort();
         bossGroup = new NioEventLoopGroup(1);
         workerGroup = new NioEventLoopGroup();
 
@@ -50,7 +46,7 @@ public class HttpProxyServer {
                             ChannelPipeline pipeline = ch.pipeline();
                             pipeline.addLast(new HttpServerCodec());
                             pipeline.addLast(new HttpObjectAggregator(65536));
-                            pipeline.addLast(new HttpProxyChannelHandler(requestHandler, proxyConfig, connectionManager));
+                            pipeline.addLast(proxyChannelHandler);
                         }
                     })
                     .option(ChannelOption.SO_BACKLOG, 128)
