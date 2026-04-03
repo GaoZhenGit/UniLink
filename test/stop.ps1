@@ -1,2 +1,3 @@
 jps -l | Select-String unilink-proxy | ForEach-Object { ($_ -split '\s+')[0] } | ForEach-Object { Stop-Process -Id $_ -Force -ErrorAction SilentlyContinue }
 jps -l | Select-String unilink-worker | ForEach-Object { ($_ -split '\s+')[0] } | ForEach-Object { Stop-Process -Id $_ -Force -ErrorAction SilentlyContinue }
+jps -l | Select-String unilink-access | ForEach-Object { ($_ -split '\s+')[0] } | ForEach-Object { Stop-Process -Id $_ -Force -ErrorAction SilentlyContinue }

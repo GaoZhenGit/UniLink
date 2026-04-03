@@ -5,16 +5,27 @@
 ## 系统架构
 
 ```
-┌─────────────┐      WebSocket       ┌─────────────┐
-│   Worker    │ ◄──────────────────► │   Proxy     │
-│ (外网节点)   │                      │ (内网集群)   │
-└─────────────┘                      └──────┬──────┘
-       │                                      │
-       │ HTTP/HTTPS                           │ HTTP 代理
-       ▼                                      ▼
-┌─────────────┐                      ┌─────────────┐
-│  目标服务器  │                      │  内网客户端  │
-└─────────────┘                      └─────────────┘
+┌─────────────┐      HTTP代理       ┌─────────────┐      WebSocket       ┌─────────────┐
+│   内网客户端  │ ─────────────────► │   Access    │ ───────────────────► │   Proxy     │
+│             │                     │ (接入端)     │                      │ (代理端)     │
+└─────────────┘                     └─────────────┘                      └──────┬──────┘
+       │                                                                        │
+       │                                                                   WebSocket
+       │                                                                        │
+       │                                                                        ▼
+       │                                                                 ┌─────────────┐
+       │                                                                 │   Worker    │
+       │                                                                 │ (工作端)     │
+       │                                                                 └──────┬──────┘
+       │                                                                        │
+       │                                                                    HTTP/HTTPS
+       │                                                                        │
+       │                                                                        ▼
+       │                                                                 ┌─────────────┐
+       └─────────────────────────────────────────────────────────────────► │  目标服务器  │
+                                                                           └─────────────┘
+
+部署位置：         内网机              内网集群              内网集群         外网机         互联网
 ```
 
 ## 功能特性
@@ -25,20 +36,29 @@
 - WebSocket 长连接
 - 断线自动重连
 - 心跳保活
+- 流式响应 (数据即时返回)
+
+## 模块说明
+
+| 模块 | 部署位置 | 功能 |
+|------|----------|------|
+| unilink-access | 内网机 | 提供本地 HTTP 代理服务，通过 WebSocket 连接代理端 |
+| unilink-proxy | 内网集群 | 接入端和工作端的中转站，负责消息路由 |
+| unilink-worker | 外网机 | 发起真实 HTTP 请求，访问互联网 |
 
 ## 快速开始
 
 ### 构建项目
 
 ```bash
-mvn clean package
+mvn clean package -DskipTests
 ```
 
 ### 启动服务
 
 1. 先启动代理服务器 (unilink-proxy)
-
 2. 再启动工作节点 (unilink-worker)
+3. 最后启动接入端 (unilink-access)
 
 ### 测试
 
@@ -52,28 +72,47 @@ curl -x http://localhost:8888 -U admin:password123 https://httpbin.org/get
 
 ## 配置说明
 
-### 代理服务器 (unilink-proxy)
+### 接入端 (unilink-access)
+
+配置文件：`unilink-access/src/main/resources/application.yml`
+
+| 配置项 | 默认值 | 说明 |
+|--------|--------|------|
+| access.http.port | 8888 | HTTP 代理端口 |
+| access.http.basic-auth.enabled | true | 启用 Basic Auth |
+| access.http.basic-auth.username | admin | 用户名 |
+| access.http.basic-auth.password | password123 | 密码 |
+| access.server.host | localhost | 代理端地址 |
+| access.server.port | 8889 | 代理端 WebSocket 端口 |
+| access.server.ws-path | /access | WebSocket 路径 |
+| access.server.heartbeat-interval | 30 | 心跳间隔(秒) |
+
+### 代理端 (unilink-proxy)
 
 配置文件：`unilink-proxy/src/main/resources/application.yml`
 
 | 配置项 | 默认值 | 说明 |
 |--------|--------|------|
-| proxy.http.port | 8888 | HTTP 代理端口 |
-| proxy.http.basic-auth.enabled | true | 启用 Basic Auth |
-| proxy.http.basic-auth.username | admin | 用户名 |
-| proxy.http.basic-auth.password | password123 | 密码 |
 | proxy.websocket.port | 8889 | WebSocket 端口 |
+| proxy.websocket.access-path | /access | 接入端连接路径 |
+| proxy.websocket.worker-path | /worker | 工作端连接路径 |
+| proxy.websocket.heartbeat-interval | 30 | 心跳间隔(秒) |
+| proxy.websocket.heartbeat-timeout | 60 | 心跳超时(秒) |
 
-### 工作节点 (unilink-worker)
+### 工作端 (unilink-worker)
 
 配置文件：`unilink-worker/src/main/resources/application.yml`
 
 | 配置项 | 默认值 | 说明 |
 |--------|--------|------|
-| proxy.url | ws://localhost:8889/ws | 代理 WebSocket 地址 |
-| proxy.auto-reconnect | true | 启用自动重连 |
-| reconnect.initial-delay | 1000 | 初始重连延迟(ms) |
-| reconnect.max-delay | 30000 | 最大重连延迟(ms) |
+| worker.server.host | 127.0.0.1 | 代理端地址 |
+| worker.server.port | 8889 | 代理端 WebSocket 端口 |
+| worker.server.ws-path | /worker | WebSocket 路径 |
+| worker.server.auto-reconnect | true | 启用自动重连 |
+| worker.server.heartbeat-interval | 30 | 心跳间隔(秒) |
+| worker.reconnect.initial-delay | 1000 | 初始重连延迟(ms) |
+| worker.reconnect.max-delay | 60000 | 最大重连延迟(ms) |
+| worker.reconnect.multiplier | 2.0 | 重连延迟倍数 |
 
 ## 通信协议
 

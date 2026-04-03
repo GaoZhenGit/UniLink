@@ -19,10 +19,11 @@ worker:
     ws-path: ${WORKER_SERVER_WS_PATH:/worker}
     ssl: ${WORKER_SERVER_SSL:false}
     auto-reconnect: ${WORKER_SERVER_AUTO_RECONNECT:true}
+    heartbeat-interval: ${WORKER_SERVER_HEARTBEAT_INTERVAL:30}
   reconnect:
     initial-delay: ${WORKER_RECONNECT_INITIAL_DELAY:1000}
     max-delay: ${WORKER_RECONNECT_MAX_DELAY:60000}
-    multiplier: ${WORKER_RECONNECT_MULTIPLIER:1.2}
+    multiplier: ${WORKER_RECONNECT_MULTIPLIER:2.0}
   http:
     connect-timeout: ${WORKER_HTTP_CONNECT_TIMEOUT:30000}
     read-timeout: ${WORKER_HTTP_READ_TIMEOUT:300000}

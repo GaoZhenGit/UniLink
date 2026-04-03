@@ -159,6 +159,7 @@ public class WorkerWebSocketClient {
     }
 
     private void startHeartbeat() {
+        int interval = config.getServer().getHeartbeatInterval();
         heartbeatScheduler = Executors.newSingleThreadScheduledExecutor();
         heartbeatScheduler.scheduleAtFixedRate(() -> {
             if (connected.get() && session != null && session.isOpen()) {
@@ -172,7 +173,7 @@ public class WorkerWebSocketClient {
                     log.error("发送心跳失败", e);
                 }
             }
-        }, 30, 30, TimeUnit.SECONDS);
+        }, interval, interval, TimeUnit.SECONDS);
     }
 
     private void stopHeartbeat() {
