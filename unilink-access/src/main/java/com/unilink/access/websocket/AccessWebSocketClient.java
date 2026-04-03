@@ -2,6 +2,7 @@ package com.unilink.access.websocket;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.unilink.access.config.AccessConfig;
+import com.unilink.access.config.AccessProxyConfig;
 import com.unilink.access.server.HttpRequestHandler;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -34,7 +35,9 @@ public class AccessWebSocketClient {
     private static final ObjectMapper objectMapper = new ObjectMapper();
 
     @Autowired
-    private AccessConfig config;
+    private AccessProxyConfig config;
+    @Autowired
+    private AccessConfig accessConfig;
 
     @Autowired
     private HttpRequestHandler requestHandler;
@@ -66,7 +69,7 @@ public class AccessWebSocketClient {
                     connected.set(true);
                     AccessWebSocketClient.this.session = session;
                     log.info("已连接到代理服务器");
-                    currentRetryDelay = config.getServer().getReconnect().getInitialDelay();
+                    currentRetryDelay = config.getReconnect().getInitialDelay();
                     startHeartbeat();
                     latch.countDown();
                 }
@@ -110,12 +113,12 @@ public class AccessWebSocketClient {
     }
 
     private String buildWebSocketUrl() {
-        String scheme = config.getServer().isSsl() ? "wss" : "ws";
+        String scheme = config.isSsl() ? "wss" : "ws";
         return String.format("%s://%s:%d%s",
                 scheme,
-                config.getServer().getHost(),
-                config.getServer().getPort(),
-                config.getServer().getWsPath());
+                config.getHost(),
+                config.getPort(),
+                config.getWsPath());
     }
 
     @PreDestroy
@@ -139,8 +142,8 @@ public class AccessWebSocketClient {
     }
 
     private void scheduleReconnect() {
-        if (currentRetryDelay < config.getServer().getReconnect().getInitialDelay()) {
-            currentRetryDelay = config.getServer().getReconnect().getInitialDelay();
+        if (currentRetryDelay < config.getReconnect().getInitialDelay()) {
+            currentRetryDelay = config.getReconnect().getInitialDelay();
         }
         if (reconnectScheduler != null) {
             reconnectScheduler.shutdown();
@@ -149,8 +152,8 @@ public class AccessWebSocketClient {
         log.info("将在 {}ms 后尝试重连", currentRetryDelay);
         reconnectScheduler.schedule(() -> connect(), currentRetryDelay, TimeUnit.MILLISECONDS);
         currentRetryDelay = (int) Math.min(
-                currentRetryDelay * config.getServer().getReconnect().getMultiplier(),
-                config.getServer().getReconnect().getMaxDelay()
+                currentRetryDelay * config.getReconnect().getMultiplier(),
+                config.getReconnect().getMaxDelay()
         );
     }
 
@@ -161,7 +164,7 @@ public class AccessWebSocketClient {
     }
 
     private void startHeartbeat() {
-        int interval = config.getServer().getHeartbeatInterval();
+        int interval = config.getHeartbeatInterval();
         heartbeatScheduler = Executors.newSingleThreadScheduledExecutor();
         heartbeatScheduler.scheduleAtFixedRate(() -> {
             if (connected.get() && session != null && session.isOpen()) {

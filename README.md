@@ -76,16 +76,21 @@ curl -x http://localhost:8888 -U admin:password123 https://httpbin.org/get
 
 配置文件：`unilink-access/src/main/resources/application.yml`
 
-| 配置项 | 默认值 | 说明 |
-|--------|--------|------|
-| access.http.port | 8888 | HTTP 代理端口 |
-| access.http.basic-auth.enabled | true | 启用 Basic Auth |
-| access.http.basic-auth.username | admin | 用户名 |
-| access.http.basic-auth.password | password123 | 密码 |
-| access.server.host | localhost | 代理端地址 |
-| access.server.port | 8889 | 代理端 WebSocket 端口 |
-| access.server.ws-path | /access | WebSocket 路径 |
-| access.server.heartbeat-interval | 30 | 心跳间隔(秒) |
+| 配置项 | 默认值 | 环境变量 | 说明 |
+|--------|--------|----------|------|
+| access.http.port | 8888 | ACCESS_HTTP_PORT | HTTP 代理端口 |
+| access.http.basic-auth.enabled | true | ACCESS_HTTP_BASIC_AUTH_ENABLED | 启用 Basic Auth |
+| access.http.basic-auth.username | admin | ACCESS_HTTP_BASIC_AUTH_USERNAME | 用户名 |
+| access.http.basic-auth.password | password123 | ACCESS_HTTP_BASIC_AUTH_PASSWORD | 密码 |
+| proxy.host | localhost | PROXY_HOST | 代理端地址 |
+| proxy.port | 8889 | PROXY_PORT | 代理端 WebSocket 端口 |
+| proxy.ws-path | /access | PROXY_WS_PATH | WebSocket 路径 |
+| proxy.ssl | false | PROXY_SSL | 是否使用 wss |
+| proxy.auto-reconnect | true | PROXY_AUTO_RECONNECT | 是否自动重连 |
+| proxy.heartbeat-interval | 30 | PROXY_HEARTBEAT_INTERVAL | 心跳间隔(秒) |
+| proxy.reconnect.initial-delay | 1000 | PROXY_RECONNECT_INITIAL_DELAY | 初始重连延迟(ms) |
+| proxy.reconnect.max-delay | 60000 | PROXY_RECONNECT_MAX_DELAY | 最大重连延迟(ms) |
+| proxy.reconnect.multiplier | 2.0 | PROXY_RECONNECT_MULTIPLIER | 重连延迟倍数 |
 
 ### 代理端 (unilink-proxy)
 
@@ -103,16 +108,19 @@ curl -x http://localhost:8888 -U admin:password123 https://httpbin.org/get
 
 配置文件：`unilink-worker/src/main/resources/application.yml`
 
-| 配置项 | 默认值 | 说明 |
-|--------|--------|------|
-| worker.server.host | 127.0.0.1 | 代理端地址 |
-| worker.server.port | 8889 | 代理端 WebSocket 端口 |
-| worker.server.ws-path | /worker | WebSocket 路径 |
-| worker.server.auto-reconnect | true | 启用自动重连 |
-| worker.server.heartbeat-interval | 30 | 心跳间隔(秒) |
-| worker.reconnect.initial-delay | 1000 | 初始重连延迟(ms) |
-| worker.reconnect.max-delay | 60000 | 最大重连延迟(ms) |
-| worker.reconnect.multiplier | 2.0 | 重连延迟倍数 |
+| 配置项 | 默认值 | 环境变量 | 说明 |
+|--------|--------|----------|------|
+| proxy.host | 127.0.0.1 | PROXY_HOST | 代理端地址 |
+| proxy.port | 8889 | PROXY_PORT | 代理端 WebSocket 端口 |
+| proxy.ws-path | /worker | PROXY_WS_PATH | WebSocket 路径 |
+| proxy.ssl | false | PROXY_SSL | 是否使用 wss |
+| proxy.auto-reconnect | true | PROXY_AUTO_RECONNECT | 是否自动重连 |
+| proxy.heartbeat-interval | 30 | PROXY_HEARTBEAT_INTERVAL | 心跳间隔(秒) |
+| proxy.reconnect.initial-delay | 1000 | PROXY_RECONNECT_INITIAL_DELAY | 初始重连延迟(ms) |
+| proxy.reconnect.max-delay | 60000 | PROXY_RECONNECT_MAX_DELAY | 最大重连延迟(ms) |
+| proxy.reconnect.multiplier | 2.0 | PROXY_RECONNECT_MULTIPLIER | 重连延迟倍数 |
+| worker.http.connect-timeout | 30000 | WORKER_HTTP_CONNECT_TIMEOUT | HTTP 连接超时(ms) |
+| worker.http.read-timeout | 300000 | WORKER_HTTP_READ_TIMEOUT | HTTP 读取超时(ms) |
 
 ## 通信协议
 
