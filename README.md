@@ -138,10 +138,7 @@ WebSocket 消息使用 JSON + 二进制格式：
 
 ## 技术栈
 
-- Spring Boot 2.7.x
-- Netty 4.x
-- WebSocket
-- Maven
+- Spring Boot 2.7.x / Netty 4.x / WebSocket / Maven
 
 ## 许可证
 
