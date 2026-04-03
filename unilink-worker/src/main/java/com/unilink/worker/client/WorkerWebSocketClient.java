@@ -108,7 +108,6 @@ public class WorkerWebSocketClient {
                 }
             }, url).get(10, TimeUnit.SECONDS);
 
-            log.info("WebSocket连接已建立");
         } catch (Exception e) {
             log.error("连接代理服务器失败: {}", e.getMessage());
             scheduleReconnect();
@@ -145,7 +144,7 @@ public class WorkerWebSocketClient {
             reconnectScheduler.shutdown();
         }
         reconnectScheduler = Executors.newSingleThreadScheduledExecutor();
-        log.info("将在 {}ms 后尝试重连", currentRetryDelay);
+        log.debug("将在 {}ms 后尝试重连", currentRetryDelay);
         reconnectScheduler.schedule(() -> connect(), currentRetryDelay, TimeUnit.MILLISECONDS);
         currentRetryDelay = (int) Math.min(
                 currentRetryDelay * config.getReconnect().getMultiplier(),
@@ -211,7 +210,7 @@ public class WorkerWebSocketClient {
                 log.debug("收到心跳响应");
                 break;
             default:
-                log.warn("未知消息类型: {}", type);
+                log.debug("未知消息类型: {}", type);
         }
     }
 
