@@ -16,7 +16,6 @@ import org.springframework.stereotype.Component;
 
 import java.util.HashMap;
 import java.util.Map;
-import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.Executors;
 import java.util.concurrent.ScheduledExecutorService;
 import java.util.concurrent.TimeUnit;
@@ -43,13 +42,10 @@ public class AccessHandler extends TextWebSocketFrameHandler {
     @Autowired
     private AccessHistoryManager historyManager;
 
-    // 待处理的请求上下文: msgId -> requestInfo
-    private final Map<String, Map<String, Object>> pendingRequests = new ConcurrentHashMap<>();
-
     @Override
     public void channelActive(ChannelHandlerContext ctx) {
         log.info("Access WebSocket连接建立: {}", ctx.channel().remoteAddress());
-        sessionRouter.registerAccess(ctx.channel());
+        // 不要在这里注册，等收到 register 消息再注册
         startHeartbeat(ctx);
     }
 
@@ -89,7 +85,7 @@ public class AccessHandler extends TextWebSocketFrameHandler {
                     requestInfo.put("accessId", reqAccessId);
                     requestInfo.put("url", url);
                     requestInfo.put("timestamp", System.currentTimeMillis());
-                    pendingRequests.put(msgId, requestInfo);
+                    sessionRouter.addPendingRequest(msgId, requestInfo);
                 }
                 // 标记下一帧二进制数据需要转发
                 int bodyLen = msg.get("bodyLen") != null ? ((Number) msg.get("bodyLen")).intValue() : 0;
