@@ -52,16 +52,16 @@ jps -l | grep unilink-worker | awk '{print $1}' | xargs -r kill -9
 **Windows (PowerShell):**
 ```powershell
 # 启动 proxy (后台)
-Start-Process java -ArgumentList "-Dfile.encoding=GBK", "-jar", "unilink-proxy\target\unilink-proxy-1.0.0.jar"
+Start-Process java -ArgumentList "-Dfile.encoding=GBK", "-jar", "unilink-proxy\target\unilink-proxy-{具体构建版本号}.jar"
 # 启动 worker (后台)
-Start-Process java -ArgumentList "-Dfile.encoding=GBK", "-jar", "unilink-worker\target\unilink-worker-1.0.0.jar"
+Start-Process java -ArgumentList "-Dfile.encoding=GBK", "-jar", "unilink-worker\target\unilink-worker-{具体构建版本号}.jar"
 ```
 **Linux:**
 ```bash
 # 启动 proxy (后台)
-nohup java -jar unilink-proxy/target/unilink-proxy-1.0.0.jar > /dev/null 2>&1 &
+nohup java -jar unilink-proxy/target/unilink-proxy-{具体构建版本号}.jar > /dev/null 2>&1 &
 # 启动 worker (后台)
-nohup java -jar unilink-worker/target/unilink-worker-1.0.0.jar > /dev/null 2>&1 &
+nohup java -jar unilink-worker/target/unilink-worker-{具体构建版本号}.jar > /dev/null 2>&1 &
 ```
 
 ### 使用说明
