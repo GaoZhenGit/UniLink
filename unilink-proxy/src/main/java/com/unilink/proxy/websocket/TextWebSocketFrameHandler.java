@@ -1,11 +1,15 @@
 package com.unilink.proxy.websocket;
 
-import io.netty.channel.*;
+import io.netty.channel.ChannelHandler;
+import io.netty.channel.ChannelHandlerContext;
+import io.netty.channel.SimpleChannelInboundHandler;
 import io.netty.handler.codec.http.websocketx.*;
+
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
-public class TextWebSocketFrameHandler extends SimpleChannelInboundHandler<WebSocketFrame> {
+@ChannelHandler.Sharable
+public abstract class TextWebSocketFrameHandler extends SimpleChannelInboundHandler<WebSocketFrame> {
 
     private static final Logger log = LoggerFactory.getLogger(TextWebSocketFrameHandler.class);
 

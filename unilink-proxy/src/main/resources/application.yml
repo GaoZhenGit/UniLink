@@ -10,14 +10,9 @@ logging:
     com.unilink: DEBUG
 
 proxy:
-  http:
-    port: ${PROXY_HTTP_PORT:8888}
-    basic-auth:
-      enabled: ${PROXY_HTTP_BASIC_AUTH_ENABLED:true}
-      username: ${PROXY_HTTP_BASIC_AUTH_USERNAME:admin}
-      password: ${PROXY_HTTP_BASIC_AUTH_PASSWORD:password123}
   websocket:
     port: ${PROXY_WEBSOCKET_PORT:8889}
-    ws-path: ${PROXY_WEBSOCKET_WS_PATH:/unilink}
+    access-path: ${PROXY_WEBSOCKET_ACCESS_PATH:/access}
+    worker-path: ${PROXY_WEBSOCKET_WORKER_PATH:/worker}
     heartbeat-interval: ${PROXY_WEBSOCKET_HEARTBEAT_INTERVAL:30}
     heartbeat-timeout: ${PROXY_WEBSOCKET_HEARTBEAT_TIMEOUT:60}

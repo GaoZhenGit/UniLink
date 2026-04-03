@@ -1,13 +1,11 @@
-package com.unilink.worker.client;
+package com.unilink.access.websocket;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
-import com.unilink.worker.config.WorkerConfig;
-import com.unilink.worker.http.RealHttpClient;
-import com.unilink.worker.protocol.MessageHandler;
+import com.unilink.access.config.AccessConfig;
+import com.unilink.access.server.HttpRequestHandler;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.annotation.Autowired;
-import org.springframework.context.annotation.Lazy;
 import org.springframework.stereotype.Component;
 import org.springframework.web.socket.CloseStatus;
 import org.springframework.web.socket.TextMessage;
@@ -18,6 +16,7 @@ import org.springframework.web.socket.client.WebSocketClient;
 import org.springframework.web.socket.client.standard.StandardWebSocketClient;
 
 import javax.annotation.PostConstruct;
+import javax.annotation.PreDestroy;
 import java.net.URI;
 import java.nio.ByteBuffer;
 import java.util.HashMap;
@@ -29,20 +28,16 @@ import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicBoolean;
 
 @Component
-public class WorkerWebSocketClient {
+public class AccessWebSocketClient {
 
-    private static final Logger log = LoggerFactory.getLogger(WorkerWebSocketClient.class);
+    private static final Logger log = LoggerFactory.getLogger(AccessWebSocketClient.class);
     private static final ObjectMapper objectMapper = new ObjectMapper();
 
     @Autowired
-    private WorkerConfig config;
+    private AccessConfig config;
 
     @Autowired
-    @Lazy
-    private RealHttpClient httpClient;
-
-    @Autowired
-    private MessageHandler messageHandler;
+    private HttpRequestHandler requestHandler;
 
     private WebSocketSession session;
     private final AtomicBoolean connected = new AtomicBoolean(false);
@@ -52,12 +47,12 @@ public class WorkerWebSocketClient {
     // 消息发送同步锁
     private final Object sendLock = new Object();
 
-    private int currentRetryDelay = 1000; // 默认1秒
-    private Map<String, Object> pendingHttpRequest;
+    private int currentRetryDelay = 1000;
+    private Map<String, Object> pendingMessage;
 
     @PostConstruct
     public void connect() {
-        String url = config.getServer().getUrl();
+        String url = buildWebSocketUrl();
         log.info("连接代理服务器: {}", url);
 
         try {
@@ -69,9 +64,9 @@ public class WorkerWebSocketClient {
                 @Override
                 public void afterConnectionEstablished(WebSocketSession session) {
                     connected.set(true);
-                    WorkerWebSocketClient.this.session = session;
+                    AccessWebSocketClient.this.session = session;
                     log.info("已连接到代理服务器");
-                    currentRetryDelay = config.getReconnect().getInitialDelay();
+                    currentRetryDelay = config.getProxy().getReconnect().getInitialDelay();
                     startHeartbeat();
                     latch.countDown();
                 }
@@ -114,6 +109,16 @@ public class WorkerWebSocketClient {
         }
     }
 
+    private String buildWebSocketUrl() {
+        String scheme = config.getProxy().isSsl() ? "wss" : "ws";
+        return String.format("%s://%s:%d%s",
+                scheme,
+                config.getProxy().getHost(),
+                config.getProxy().getPort(),
+                config.getProxy().getWsPath());
+    }
+
+    @PreDestroy
     public void disconnect() {
         connected.set(false);
         stopHeartbeat();
@@ -130,15 +135,12 @@ public class WorkerWebSocketClient {
     private void onDisconnected() {
         connected.set(false);
         stopHeartbeat();
-        if (config.getServer().isAutoReconnect()) {
-            scheduleReconnect();
-        }
+        scheduleReconnect();
     }
 
     private void scheduleReconnect() {
-        // 确保最小延迟
-        if (currentRetryDelay < config.getReconnect().getInitialDelay()) {
-            currentRetryDelay = config.getReconnect().getInitialDelay();
+        if (currentRetryDelay < config.getProxy().getReconnect().getInitialDelay()) {
+            currentRetryDelay = config.getProxy().getReconnect().getInitialDelay();
         }
         if (reconnectScheduler != null) {
             reconnectScheduler.shutdown();
@@ -147,8 +149,8 @@ public class WorkerWebSocketClient {
         log.info("将在 {}ms 后尝试重连", currentRetryDelay);
         reconnectScheduler.schedule(() -> connect(), currentRetryDelay, TimeUnit.MILLISECONDS);
         currentRetryDelay = (int) Math.min(
-                currentRetryDelay * config.getReconnect().getMultiplier(),
-                config.getReconnect().getMaxDelay()
+                currentRetryDelay * config.getProxy().getReconnect().getMultiplier(),
+                config.getProxy().getReconnect().getMaxDelay()
         );
     }
 
@@ -159,6 +161,7 @@ public class WorkerWebSocketClient {
     }
 
     private void startHeartbeat() {
+        int interval = config.getProxy().getHeartbeatInterval();
         heartbeatScheduler = Executors.newSingleThreadScheduledExecutor();
         heartbeatScheduler.scheduleAtFixedRate(() -> {
             if (connected.get() && session != null && session.isOpen()) {
@@ -168,11 +171,12 @@ public class WorkerWebSocketClient {
                     pingMap.put("timestamp", System.currentTimeMillis());
                     String ping = objectMapper.writeValueAsString(pingMap);
                     sendMessageSync(new TextMessage(ping));
+                    log.debug("发送心跳到Proxy");
                 } catch (Exception e) {
                     log.error("发送心跳失败", e);
                 }
             }
-        }, 30, 30, TimeUnit.SECONDS);
+        }, interval, interval, TimeUnit.SECONDS);
     }
 
     private void stopHeartbeat() {
@@ -187,19 +191,19 @@ public class WorkerWebSocketClient {
         String type = (String) msg.get("type");
 
         switch (type) {
-            case "http_request":
-                pendingHttpRequest = msg;
+            case "http_response":
+            case "http_chunk":
+                pendingMessage = msg;
                 int bodyLen = msg.get("bodyLen") != null ? ((Number) msg.get("bodyLen")).intValue() : 0;
                 if (bodyLen == 0) {
-                    messageHandler.handleHttpRequest(msg, new byte[0]);
+                    handleHttpResponse(msg, null);
                 }
                 break;
             case "tunnel_data":
-                // 隧道数据，直接处理
-                pendingHttpRequest = msg;
+                pendingMessage = msg;
                 int tunnelBodyLen = msg.get("bodyLen") != null ? ((Number) msg.get("bodyLen")).intValue() : 0;
                 if (tunnelBodyLen == 0) {
-                    messageHandler.handleTunnelData((String) msg.get("msgId"), new byte[0]);
+                    requestHandler.sendTunnelDataToClient((String) msg.get("msgId"), null);
                 }
                 break;
             case "heartbeat":
@@ -216,19 +220,25 @@ public class WorkerWebSocketClient {
     private void handleBinaryMessagePayload(BinaryMessage message) throws Exception {
         byte[] body = message.getPayload().array();
 
-        if (pendingHttpRequest != null) {
-            String type = (String) pendingHttpRequest.get("type");
-            String msgId = (String) pendingHttpRequest.get("msgId");
-
+        if (pendingMessage != null) {
+            String type = (String) pendingMessage.get("type");
             if ("tunnel_data".equals(type)) {
-                messageHandler.handleTunnelData(msgId, body);
+                requestHandler.sendTunnelDataToClient((String) pendingMessage.get("msgId"), body);
             } else {
-                messageHandler.handleHttpRequest(pendingHttpRequest, body);
+                handleHttpResponse(pendingMessage, body);
             }
-            pendingHttpRequest = null;
-        } else {
-            messageHandler.handleBinaryResponse(body);
+            pendingMessage = null;
         }
+    }
+
+    @SuppressWarnings("unchecked")
+    private void handleHttpResponse(Map<String, Object> msg, byte[] body) {
+        String msgId = (String) msg.get("msgId");
+        int statusCode = msg.get("statusCode") != null ? ((Number) msg.get("statusCode")).intValue() : 200;
+        Map<String, String> headers = msg.get("headers") != null ? (Map<String, String>) msg.get("headers") : null;
+        boolean finished = msg.get("finished") != null && (Boolean) msg.get("finished");
+
+        requestHandler.sendResponse(msgId, statusCode, headers, body, finished);
     }
 
     private void handleHeartbeat() {
@@ -265,6 +275,19 @@ public class WorkerWebSocketClient {
         }
     }
 
+    public void sendMessage(String text, byte[] binaryData) throws Exception {
+        synchronized (sendLock) {
+            if (session != null && session.isOpen()) {
+                session.sendMessage(new TextMessage(text));
+                if (binaryData != null && binaryData.length > 0) {
+                    session.sendMessage(new BinaryMessage(ByteBuffer.wrap(binaryData)));
+                }
+            } else {
+                throw new RuntimeException("WebSocket未连接");
+            }
+        }
+    }
+
     public void sendMessage(String text) throws Exception {
         sendMessageSync(new TextMessage(text));
     }
@@ -274,6 +297,6 @@ public class WorkerWebSocketClient {
     }
 
     public boolean isConnected() {
-        return connected.get();
+        return connected.get() && session != null && session.isOpen();
     }
 }

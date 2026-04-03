@@ -1,9 +1,10 @@
-package com.unilink.proxy.handler;
+package com.unilink.access.server;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
-import com.unilink.proxy.config.ProxyConfig;
-import com.unilink.proxy.server.WorkerConnectionManager;
+import com.unilink.access.config.AccessConfig;
+import com.unilink.access.websocket.AccessWebSocketClient;
 import io.netty.buffer.ByteBuf;
+import io.netty.buffer.Unpooled;
 import io.netty.channel.Channel;
 import io.netty.channel.ChannelFutureListener;
 import io.netty.channel.ChannelHandlerContext;
@@ -18,18 +19,20 @@ import java.util.*;
 import java.util.concurrent.ConcurrentHashMap;
 
 @Component
-public class ProxyRequestHandler {
+public class HttpRequestHandler {
 
-    private static final Logger log = LoggerFactory.getLogger(ProxyRequestHandler.class);
+    private static final Logger log = LoggerFactory.getLogger(HttpRequestHandler.class);
     private static final ObjectMapper objectMapper = new ObjectMapper();
 
     @Autowired
-    private WorkerConnectionManager connectionManager;
+    private PendingRequestManager pendingRequestManager;
 
     @Autowired
-    private ProxyConfig config;
+    private AccessConfig config;
 
-    // 保存最后一次发送的 msgId（用于 CONNECT 回调）
+    @Autowired
+    private AccessWebSocketClient wsClient;
+
     private String lastMsgId;
     private final Map<String, Runnable> connectCallbacks = new ConcurrentHashMap<>();
 
@@ -39,10 +42,8 @@ public class ProxyRequestHandler {
         String url = request.uri();
         int bodyLen = request.content().readableBytes();
 
-        // 保存最后一次 msgId
         this.lastMsgId = msgId;
 
-        // 构建HTTP请求消息
         Map<String, Object> msg = new HashMap<>();
         msg.put("msgId", msgId);
         msg.put("type", "http_request");
@@ -50,45 +51,32 @@ public class ProxyRequestHandler {
         msg.put("url", url);
         msg.put("bodyLen", bodyLen);
 
-        // 转换headers
         Map<String, String> headers = new HashMap<>();
         request.headers().forEach(entry -> headers.put(entry.getKey(), entry.getValue()));
         msg.put("headers", headers);
 
-        // 存储客户端上下文，用于返回响应
-        connectionManager.registerPendingRequest(msgId, clientCtx, method);
+        pendingRequestManager.registerPendingRequest(msgId, clientCtx, method);
 
         try {
-            // 发送给Worker（JSON头 + 二进制body）
             String jsonHeader = objectMapper.writeValueAsString(msg);
             byte[] body = new byte[bodyLen];
             if (bodyLen > 0) {
                 request.content().getBytes(0, body);
             }
 
-            Channel workerChannel = connectionManager.getAvailableWorker();
-            if (workerChannel == null) {
-                log.warn("没有可用的Worker连接");
-                sendErrorResponse(clientCtx, HttpResponseStatus.BAD_GATEWAY, "No worker available");
-                connectionManager.removePendingRequest(msgId);
+            if (!wsClient.isConnected()) {
+                log.warn("WebSocket未连接到Proxy");
+                sendErrorResponse(clientCtx, HttpResponseStatus.BAD_GATEWAY, "Not connected to proxy");
+                pendingRequestManager.removePendingRequest(msgId);
                 return;
             }
 
-            // 发送JSON头（文本帧）
-            workerChannel.writeAndFlush(new io.netty.handler.codec.http.websocketx.TextWebSocketFrame(jsonHeader));
-
-            // 发送二进制body（二进制帧）
-            if (bodyLen > 0) {
-                workerChannel.writeAndFlush(new io.netty.handler.codec.http.websocketx.BinaryWebSocketFrame(
-                        request.content().retainedSlice()
-                ));
-            }
-
-            log.info("HTTP请求已转发给Worker: {} {} (msgId={})", method, url, msgId);
+            wsClient.sendMessage(jsonHeader, bodyLen > 0 ? body : null);
+            log.info("HTTP请求已转发给Proxy: {} {} (msgId={})", method, url, msgId);
         } catch (Exception e) {
             log.error("转发HTTP请求失败", e);
             sendErrorResponse(clientCtx, HttpResponseStatus.INTERNAL_SERVER_ERROR, e.getMessage());
-            connectionManager.removePendingRequest(msgId);
+            pendingRequestManager.removePendingRequest(msgId);
         }
     }
 
@@ -102,17 +90,16 @@ public class ProxyRequestHandler {
     }
 
     public void sendResponse(String msgId, int statusCode, Map<String, String> headers, byte[] body, boolean finished) {
-        ChannelHandlerContext clientCtx = connectionManager.getPendingRequest(msgId);
+        ChannelHandlerContext clientCtx = pendingRequestManager.getPendingRequest(msgId);
         if (clientCtx == null) {
             log.warn("未找到对应的客户端上下文: {}", msgId);
             return;
         }
 
-        String method = connectionManager.getPendingRequestMethod(msgId);
+        String method = pendingRequestManager.getPendingRequestMethod(msgId);
         boolean isConnect = "CONNECT".equalsIgnoreCase(method);
 
         try {
-            // CONNECT 请求特殊处理
             if (isConnect && statusCode == 200) {
                 FullHttpResponse response = new DefaultFullHttpResponse(
                         HttpVersion.HTTP_1_1,
@@ -121,7 +108,6 @@ public class ProxyRequestHandler {
                 clientCtx.writeAndFlush(response);
                 log.info("CONNECT隧道响应已发送到客户端: msgId={}", msgId);
 
-                // 调用回调切换到隧道模式
                 Runnable callback = connectCallbacks.remove(msgId);
                 if (callback != null) {
                     callback.run();
@@ -129,11 +115,9 @@ public class ProxyRequestHandler {
                 return;
             }
 
-            boolean headersSent = connectionManager.isHeadersSent(msgId);
+            boolean headersSent = pendingRequestManager.isHeadersSent(msgId);
 
-            // 流式传输：首次发送响应头 + 内容，后续只发送内容
             if (!headersSent) {
-                // 第一次发送：发送响应头
                 HttpResponse response = new DefaultHttpResponse(
                         HttpVersion.HTTP_1_1,
                         HttpResponseStatus.valueOf(statusCode)
@@ -142,15 +126,13 @@ public class ProxyRequestHandler {
                 if (headers != null) {
                     headers.forEach(response.headers()::set);
                 }
-                // 设置 Transfer-Encoding: chunked
                 response.headers().set(HttpHeaderNames.TRANSFER_ENCODING, HttpHeaderValues.CHUNKED);
 
                 clientCtx.write(response);
-                connectionManager.setHeadersSent(msgId, statusCode, headers);
+                pendingRequestManager.setHeadersSent(msgId, statusCode, headers);
                 log.debug("发送响应头: msgId={}, statusCode={}", msgId, statusCode);
             }
 
-            // 发送内容块
             if (body != null && body.length > 0) {
                 ByteBuf content = clientCtx.channel().alloc().buffer(body.length);
                 content.writeBytes(body);
@@ -159,16 +141,13 @@ public class ProxyRequestHandler {
                 log.debug("发送数据块: msgId={}, len={}", msgId, body.length);
             }
 
-            // 如果完成，发送结束标记
             if (finished) {
                 clientCtx.writeAndFlush(LastHttpContent.EMPTY_LAST_CONTENT);
-                // CONNECT 隧道不删除 pending request，等待后续 tunnel_data
                 if (!isConnect) {
-                    connectionManager.removePendingRequest(msgId);
+                    pendingRequestManager.removePendingRequest(msgId);
                 }
                 log.info("HTTP响应完成: msgId={}", msgId);
             } else {
-                // 确保数据被刷新
                 clientCtx.flush();
             }
         } catch (Exception e) {
@@ -177,45 +156,24 @@ public class ProxyRequestHandler {
         }
     }
 
-    /**
-     * 发送隧道数据到 Worker（客户端 -> 目标服务器）
-     */
     public void sendTunnelData(String msgId, byte[] data) {
-        // 获取 Worker 通道
-        Channel workerChannel = connectionManager.getAvailableWorker();
-        if (workerChannel == null) {
-            log.warn("没有可用的Worker连接: {}", msgId);
-            return;
-        }
-
         try {
             if (data != null && data.length > 0) {
-                // 构建 tunnel_data 消息
                 Map<String, Object> msg = new HashMap<>();
                 msg.put("msgId", msgId);
                 msg.put("type", "tunnel_data");
                 msg.put("bodyLen", data.length);
 
                 String json = objectMapper.writeValueAsString(msg);
-
-                // 发送 JSON 头（文本帧）
-                workerChannel.writeAndFlush(new io.netty.handler.codec.http.websocketx.TextWebSocketFrame(json));
-
-                // 发送二进制数据（二进制帧）
-                workerChannel.writeAndFlush(new io.netty.handler.codec.http.websocketx.BinaryWebSocketFrame(
-                        io.netty.buffer.Unpooled.wrappedBuffer(data)
-                ));
+                wsClient.sendMessage(json, data);
             }
         } catch (Exception e) {
-            log.error("发送隧道数据到Worker失败: {}", msgId, e);
+            log.error("发送隧道数据到Proxy失败: {}", msgId, e);
         }
     }
 
-    /**
-     * 从 Worker 收到隧道数据，转发给客户端（目标服务器 -> 客户端）
-     */
     public void sendTunnelDataToClient(String msgId, byte[] data) {
-        ChannelHandlerContext clientCtx = connectionManager.getPendingRequest(msgId);
+        ChannelHandlerContext clientCtx = pendingRequestManager.getPendingRequest(msgId);
         if (clientCtx == null) {
             log.warn("未找到对应的客户端上下文: {}", msgId);
             return;

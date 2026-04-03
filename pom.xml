@@ -14,6 +14,7 @@
     <modules>
         <module>unilink-proxy</module>
         <module>unilink-worker</module>
+        <module>unilink-access</module>
     </modules>
 
     <properties>

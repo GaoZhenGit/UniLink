@@ -1,34 +1,32 @@
-package com.unilink.proxy.server;
+package com.unilink.access.server;
 
-import com.unilink.proxy.config.ProxyConfig;
-import com.unilink.proxy.handler.ProxyRequestHandler;
+import com.unilink.access.config.AccessConfig;
 import io.netty.buffer.ByteBuf;
 import io.netty.channel.*;
 import io.netty.handler.codec.http.*;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.stereotype.Component;
 
 import java.nio.charset.StandardCharsets;
 import java.util.Base64;
-import java.util.concurrent.ConcurrentHashMap;
 import java.util.Map;
+import java.util.concurrent.ConcurrentHashMap;
 
+@Component
 public class HttpProxyChannelHandler extends SimpleChannelInboundHandler<FullHttpRequest> {
 
     private static final Logger log = LoggerFactory.getLogger(HttpProxyChannelHandler.class);
 
-    private final ProxyRequestHandler requestHandler;
-    private final ProxyConfig config;
-    private final WorkerConnectionManager connectionManager;
+    @Autowired
+    private AccessConfig config;
 
-    // 保存 CONNECT 隧道对应的 Worker Channel
+    @Autowired
+    private HttpRequestHandler requestHandler;
+
+    // 保存 CONNECT 隧道对应的上下文
     private static final Map<String, Channel> tunnelChannels = new ConcurrentHashMap<>();
-
-    public HttpProxyChannelHandler(ProxyRequestHandler requestHandler, ProxyConfig config, WorkerConnectionManager connectionManager) {
-        this.requestHandler = requestHandler;
-        this.config = config;
-        this.connectionManager = connectionManager;
-    }
 
     @Override
     protected void channelRead0(ChannelHandlerContext ctx, FullHttpRequest request) throws Exception {
@@ -40,10 +38,8 @@ public class HttpProxyChannelHandler extends SimpleChannelInboundHandler<FullHtt
         String method = request.method().name();
 
         if ("CONNECT".equalsIgnoreCase(method)) {
-            // 处理 CONNECT 请求
             handleConnect(ctx, request);
         } else {
-            // 普通 HTTP 请求，转发给 Worker
             requestHandler.handleHttpRequest(ctx, request);
         }
     }
@@ -52,13 +48,10 @@ public class HttpProxyChannelHandler extends SimpleChannelInboundHandler<FullHtt
         String host = request.uri();
         log.info("收到CONNECT请求: {}", host);
 
-        // 转发 CONNECT 请求给 Worker
         requestHandler.handleHttpRequest(ctx, request);
 
-        // 注册回调，等待 Worker 返回 200 后切换到隧道模式
         String msgId = requestHandler.getLastMsgId(ctx);
         requestHandler.registerConnectCallback(msgId, () -> {
-            // Worker 返回 200 后，切换到原始数据转发模式
             switchToTunnelMode(ctx, host, msgId);
         });
     }
@@ -66,21 +59,17 @@ public class HttpProxyChannelHandler extends SimpleChannelInboundHandler<FullHtt
     private void switchToTunnelMode(ChannelHandlerContext ctx, String host, String msgId) {
         log.info("CONNECT隧道建立成功，切换到转发模式: {}", host);
 
-        // 使用 execute 确保在正确的 EventLoop 中执行
         ctx.channel().eventLoop().execute(() -> {
             try {
                 ChannelPipeline pipeline = ctx.pipeline();
 
-                // 移除 HTTP 编解码器和当前 handler
                 pipeline.remove(HttpServerCodec.class);
                 pipeline.remove(HttpObjectAggregator.class);
 
-                // 移除当前 handler（如果还在 pipeline 中）
                 if (pipeline.get(HttpProxyChannelHandler.class) != null) {
                     pipeline.remove(HttpProxyChannelHandler.class);
                 }
 
-                // 添加原始数据转发 Handler
                 pipeline.addLast(new TunnelDataForwardHandler(requestHandler, msgId));
 
                 log.info("隧道模式已就绪: msgId={}", msgId);
@@ -112,7 +101,7 @@ public class HttpProxyChannelHandler extends SimpleChannelInboundHandler<FullHtt
 
             String username = parts[0];
             String password = parts[1];
-            ProxyConfig.BasicAuth basicAuth = config.getHttp().getBasicAuth();
+            AccessConfig.BasicAuth basicAuth = config.getHttp().getBasicAuth();
 
             if (username.equals(basicAuth.getUsername()) && password.equals(basicAuth.getPassword())) {
                 return true;
@@ -140,26 +129,23 @@ public class HttpProxyChannelHandler extends SimpleChannelInboundHandler<FullHtt
         ctx.close();
     }
 
-    // 隧道数据转发 Handler - 直接转发原始数据
+    // 隧道数据转发 Handler
     private static class TunnelDataForwardHandler extends ChannelInboundHandlerAdapter {
-        private final ProxyRequestHandler requestHandler;
+        private final HttpRequestHandler requestHandler;
         private final String msgId;
 
-        public TunnelDataForwardHandler(ProxyRequestHandler requestHandler, String msgId) {
+        public TunnelDataForwardHandler(HttpRequestHandler requestHandler, String msgId) {
             this.requestHandler = requestHandler;
             this.msgId = msgId;
         }
 
         @Override
         public void channelRead(ChannelHandlerContext ctx, Object msg) throws Exception {
-            // 读取客户端发送的原始数据，转发到 Worker
             if (msg instanceof ByteBuf) {
                 ByteBuf buf = (ByteBuf) msg;
                 int len = buf.readableBytes();
                 byte[] data = new byte[len];
                 buf.readBytes(data);
-
-                // 发送到 Worker
                 requestHandler.sendTunnelData(msgId, data);
             }
         }
@@ -174,10 +160,5 @@ public class HttpProxyChannelHandler extends SimpleChannelInboundHandler<FullHtt
             log.error("隧道转发异常", cause);
             ctx.close();
         }
-    }
-
-    // 静态方法供 ProxyRequestHandler 调用
-    public static void registerTunnelChannel(String msgId, Channel workerChannel) {
-        tunnelChannels.put(msgId, workerChannel);
     }
 }
