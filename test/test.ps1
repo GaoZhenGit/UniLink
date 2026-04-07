@@ -63,6 +63,54 @@ function Invoke-Curl {
 }
 
 # =============================================
+# Helper: streaming request test (for SSE responses)
+# =============================================
+function Test-StreamingRequest {
+    param(
+        [string]$Name,
+        [string]$Proxy,
+        [string]$ProxyAuth,
+        [int]$TimeoutSec = 300
+    )
+
+    Write-Host ""
+    Write-Host "--- $Name (streaming) ---" -ForegroundColor Cyan
+
+    $cmd = "curl.exe -s --max-time $TimeoutSec"
+    if ($Proxy)     { $cmd += " -x $Proxy" }
+    if ($ProxyAuth) { $cmd += " -U $ProxyAuth" }
+    $cmd += " --data-binary `"@test\claude_request.json`""
+    $cmd += " -H `"Content-Type: application/json`""
+    $cmd += " -H `"Authorization: Bearer $($env:MINIMAX_API_KEY)`""
+    $cmd += " `"https://api.minimaxi.com/anthropic/v1/messages`""
+
+    $outFile = "$env:TEMP\minimax_stream_$([guid]::NewGuid().ToString('N')).txt"
+    Write-Host "CMD: $cmd" -ForegroundColor DarkGray
+
+    $sw = [Diagnostics.Stopwatch]::StartNew()
+    $process = Start-Process cmd -ArgumentList "/c", "$cmd -o `"$outFile`"" -NoNewWindow -Wait -PassThru
+    $sw.Stop()
+    $exitCode = $process.ExitCode
+    $elapsed = [math]::Round($sw.Elapsed.TotalSeconds, 2)
+
+    $ok = $false
+    if ($exitCode -eq 0 -and (Test-Path $outFile)) {
+        $content = Get-Content $outFile -Raw -ErrorAction SilentlyContinue
+        $eventCount = ([regex]::Matches($content, "(?m)^event:")).Count
+        $dataCount  = ([regex]::Matches($content, "(?m)^data:")).Count
+        $hasStreaming = $eventCount -gt 0 -and $dataCount -gt 0
+        Write-Host "  size=$($content.Length) bytes, event=$eventCount, data=$dataCount, time=${elapsed}s" -ForegroundColor Yellow
+        $ok = $hasStreaming
+        Remove-Item $outFile -Force -ErrorAction SilentlyContinue
+    } else {
+        Write-Host "  EXIT: $exitCode, TIME: ${elapsed}s" -ForegroundColor Red
+    }
+
+    Write-Host "  RESULT: $(if ($ok) { 'PASS' } else { 'FAIL' })" -ForegroundColor $(if ($ok) { 'Green' } else { 'Red' })
+    return $ok
+}
+
+# =============================================
 # Test cases
 # =============================================
 Write-Host ""
@@ -135,18 +183,12 @@ if ($ok) { $passed++ }
 
 # --- MiniMax API via SOCKS5 proxy (streaming) ---
 $total++
-Write-Host ""
-Write-Host "--- MiniMax API via SOCKS5 proxy (streaming) ---" -ForegroundColor Cyan
 if (-not $env:MINIMAX_API_KEY) {
+    Write-Host ""
+    Write-Host "--- MiniMax API via SOCKS5 proxy (streaming) ---" -ForegroundColor Cyan
     Write-Host "SKIP: MINIMAX_API_KEY not set" -ForegroundColor DarkGray
 } else {
-    $minimaxSocksCmd = "curl.exe -s --max-time 300 -o nul -x socks5h://127.0.0.1:1080 -U socks5:password --data-binary @test\claude_request.json -H `"Content-Type: application/json`" -H `"Authorization: Bearer `+$env:MINIMAX_API_KEY+`" https://api.minimaxi.com/anthropic/v1/messages"
-    $process = Start-Process cmd -ArgumentList "/c", $minimaxSocksCmd -NoNewWindow -Wait -PassThru
-    $exitCode = $process.ExitCode
-    $httpCode = if ($exitCode -eq 0) { "200" } else { "FAIL($exitCode)" }
-    $ok = ($exitCode -eq 0)
-    Write-Host "EXIT: $exitCode, HTTP: $httpCode (expected: EXIT=0, HTTP=200)" -ForegroundColor $(if ($ok) { "Green" } else { "Red" })
-    if ($ok) { $passed++ }
+    if (Test-StreamingRequest -Name "MiniMax via SOCKS5" -Proxy "socks5h://127.0.0.1:1080" -ProxyAuth "socks5:password") { $passed++ }
 }
 
 # --- Access history query ---
