@@ -16,6 +16,7 @@
 - 支持 HTTP 和 HTTPS 代理
 - 支持 Basic Auth 认证
 - 支持 HTTPS CONNECT 隧道
+- 支持 SOCKS5 代理协议（支持无认证和用户名密码认证）
 - WebSocket 长连接
 - 断线自动重连
 - 心跳保活
@@ -51,6 +52,12 @@ curl -x http://localhost:8888 -U admin:password123 http://httpbin.org/get
 
 # HTTPS 请求
 curl -x http://localhost:8888 -U admin:password123 https://httpbin.org/get
+
+# SOCKS5 请求（远程 DNS 解析，DNS 由代理服务器解析）
+curl.exe -x socks5h://127.0.0.1:1080 https://www.baidu.com
+
+# SOCKS5 请求（本地 DNS 解析）
+curl.exe -x socks5://127.0.0.1:1080 https://www.baidu.com
 ```
 
 ## 配置说明
@@ -65,6 +72,11 @@ curl -x http://localhost:8888 -U admin:password123 https://httpbin.org/get
 | access.http.basic-auth.enabled | true | ACCESS_HTTP_BASIC_AUTH_ENABLED | 启用 Basic Auth |
 | access.http.basic-auth.username | admin | ACCESS_HTTP_BASIC_AUTH_USERNAME | 用户名 |
 | access.http.basic-auth.password | password123 | ACCESS_HTTP_BASIC_AUTH_PASSWORD | 密码 |
+| access.socks5.enabled | true | ACCESS_SOCKS5_ENABLED | 启用 SOCKS5 代理 |
+| access.socks5.port | 1080 | ACCESS_SOCKS5_PORT | SOCKS5 代理端口 |
+| access.socks5.auth.enabled | false | ACCESS_SOCKS5_AUTH_ENABLED | 启用 SOCKS5 用户名密码认证 |
+| access.socks5.auth.username | socks5 | ACCESS_SOCKS5_AUTH_USERNAME | SOCKS5 用户名 |
+| access.socks5.auth.password | password | ACCESS_SOCKS5_AUTH_PASSWORD | SOCKS5 密码 |
 | proxy.host | localhost | PROXY_HOST | 代理端地址 |
 | proxy.port | 8889 | PROXY_PORT | 代理端 WebSocket 端口 |
 | proxy.ws-path | /access | PROXY_WS_PATH | WebSocket 路径 |
@@ -116,6 +128,9 @@ WebSocket 消息使用 JSON + 二进制格式：
 - `http_request` - HTTP 请求转发
 - `http_response` / `http_chunk` - HTTP 响应
 - `tunnel_data` - CONNECT 隧道数据
+- `socks5_connect` - SOCKS5 连接请求
+- `socks5_response` - SOCKS5 连接响应
+- `socks5_tunnel_data` - SOCKS5 隧道数据
 - `heartbeat` - 心跳
 - `heartbeat_ack` - 心跳响应
 

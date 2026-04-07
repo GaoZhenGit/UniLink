@@ -10,7 +10,7 @@ Spring Boot 2.7.x / Netty 4.x / WebSocket / Maven
 
 ## 模块
 
-- `unilink-access/`: 接入端 (部署在内网机) - HTTP 代理端口 8888，支持 Basic Auth，通过 WebSocket 连接代理端
+- `unilink-access/`: 接入端 (部署在内网机) - HTTP 代理端口 8888，支持 Basic Auth，SOCKS5 代理端口 1080，通过 WebSocket 连接代理端
 - `unilink-proxy/`: 代理端 (部署在内网集群) - WebSocket 端口 8889
 - `unilink-worker/`: 工作端 (部署在外网机) - 通过 WebSocket 连接到代理端，发起真实 HTTP 请求
 
@@ -55,12 +55,16 @@ nohup java -jar unilink-access/target/unilink-access-{版本号}.jar > /dev/null
 unilink-access/src/main/java/com/unilink/access/
 ├── AccessApplication.java           # 启动类
 ├── config/
-│   ├── AccessConfig.java            # access.http.* 配置
+│   ├── AccessConfig.java            # access.http.* 和 access.socks5.* 配置
 │   └── AccessProxyConfig.java       # proxy.* 连接配置
 ├── server/
 │   ├── HttpProxyServer.java         # HTTP 代理服务器 (Netty)
 │   ├── HttpProxyChannelHandler.java # 通道处理器 (含 CONNECT 隧道)
-│   ├── HttpRequestHandler.java      # 请求处理
+│   ├── HttpRequestHandler.java      # HTTP 请求处理
+│   ├── Socks5ProxyServer.java       # SOCKS5 代理服务器 (Netty)
+│   ├── Socks5ChannelHandler.java    # SOCKS5 协议状态机处理器
+│   ├── Socks5RequestHandler.java     # SOCKS5 请求处理
+│   ├── Socks5TunnelForwardHandler.java # SOCKS5 隧道数据转发
 │   └── PendingRequestManager.java   # 请求管理
 └── websocket/
     └── AccessWebSocketClient.java   # WebSocket 客户端
@@ -70,7 +74,9 @@ unilink-proxy/src/main/java/com/unilink/proxy/
 ├── config/
 │   └── ProxyConfig.java             # 代理配置
 └── websocket/
-    └── ProxyWebSocketHandler.java   # WebSocket 处理器
+    ├── ProxyWebSocketHandler.java   # WebSocket 处理器
+    ├── AccessHandler.java           # 接入端消息处理
+    └── WorkerHandler.java           # 工作端消息处理
 
 unilink-worker/src/main/java/com/unilink/worker/
 ├── WorkerApplication.java           # 启动类
@@ -84,7 +90,8 @@ unilink-worker/src/main/java/com/unilink/worker/
 ├── protocol/
 │   └── MessageHandler.java          # 消息处理
 └── tunnel/
-    └── ConnectTunnelHandler.java    # CONNECT 隧道处理
+    ├── ConnectTunnelHandler.java    # CONNECT 隧道处理
+    └── Socks5TunnelHandler.java     # SOCKS5 隧道处理
 ```
 
 ## 测试方法
@@ -95,6 +102,12 @@ curl.exe -x http://localhost:8888 -U admin:password123 -v http://httpbin.org/get
 
 # HTTPS 测试
 curl.exe -x http://localhost:8888 -U admin:password123 -v https://httpbin.org/get
+
+# SOCKS5 测试（远程 DNS 解析，DNS 由代理服务器解析）
+curl.exe -x socks5h://127.0.0.1:1080 https://www.baidu.com
+
+# SOCKS5 测试（本地 DNS 解析）
+curl.exe -x socks5://127.0.0.1:1080 https://www.baidu.com
 ```
 
 ## 注意事项
@@ -107,6 +120,7 @@ mvn clean package #构建jar包
 .\test\start.ps1 #按顺序启动proxy、worker、access
 # 启动命令结束后等10秒，完成ws连接
 # 使用curl.exe执行多次http代理测试（至少5次）
+# 使用curl.exe执行多次socks5代理测试（至少5次）
 # 查看 @\logs下的日志，并分析问题
 .\test\stop.ps1 #结束三个服务
 ```
