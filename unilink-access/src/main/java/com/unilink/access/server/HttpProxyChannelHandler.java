@@ -65,9 +65,13 @@ public class HttpProxyChannelHandler extends SimpleChannelInboundHandler<FullHtt
             try {
                 ChannelPipeline pipeline = ctx.pipeline();
 
-                pipeline.remove(HttpServerCodec.class);
-                pipeline.remove(HttpObjectAggregator.class);
-
+                // 安全移除：如果处理器不存在则跳过
+                if (pipeline.get(HttpServerCodec.class) != null) {
+                    pipeline.remove(HttpServerCodec.class);
+                }
+                if (pipeline.get(HttpObjectAggregator.class) != null) {
+                    pipeline.remove(HttpObjectAggregator.class);
+                }
                 if (pipeline.get(HttpProxyChannelHandler.class) != null) {
                     pipeline.remove(HttpProxyChannelHandler.class);
                 }

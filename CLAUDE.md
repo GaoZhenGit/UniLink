@@ -101,10 +101,12 @@ curl.exe -x http://localhost:8888 -U admin:password123 -v https://httpbin.org/ge
 
 - 本项目允许你自动构建、启动服务，测试，分析日志，排查问题，我推荐以下顺序步骤：
 ```
+.\test\stop.ps1 #结束三个服务
 del .\logs\* #清空历史日志文件
 mvn clean package #构建jar包
 .\test\start.ps1 #按顺序启动proxy、worker、access
-#启动命令结束后等10秒，完成ws连接
-#查看 @\logs下的日志，并分析问题
+# 启动命令结束后等10秒，完成ws连接
+# 使用curl.exe执行多次http代理测试（至少5次）
+# 查看 @\logs下的日志，并分析问题
 .\test\stop.ps1 #结束三个服务
 ```
