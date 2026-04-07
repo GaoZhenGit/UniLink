@@ -1,0 +1,11 @@
+{
+  "model": "MiniMax-M2.7",
+  "max_tokens": 1024,
+  "stream": true,
+  "messages": [
+    {
+      "role": "user",
+      "content": "You are an expert Java architect and code reviewer. Please review the following code thoroughly and provide detailed feedback.\n\nWrite a thread-safe LRU cache implementation in Java. The cache should:\n1. Use ConcurrentHashMap for thread-safe key-value storage\n2. Use ReentrantReadWriteLock for fine-grained locking\n3. Maintain access order so that get() updates LRU position\n4. Automatically evict the least recently used entry when capacity is reached\n5. Provide O(1) time complexity for get and put operations\n6. Include null key/value validation\n7. Include comprehensive unit tests with JUnit 5\n8. Handle concurrent access correctly without deadlocks\n9. Provide proper exception handling\n10. Include Javadoc documentation\n\nPlease write the complete production-ready source code."
+    }
+  ]
+}

@@ -71,6 +71,23 @@ curl.exe http://localhost:8082/unilink/access/with-history
 curl.exe "http://localhost:8082/unilink/access/ac/history?limit=10"
 ```
 
+### MiniMax API 代理场景
+
+用于代理 Claude Code / AI API 请求。请求体文件：`test/claude_request.json`，API Key 配置在 `test/config.ps1` 中（不在 git 中）。
+
+```powershell
+# 通过代理调用 MiniMax API（大请求测试，约 1800 字节输入 + 4096 tokens 输出）
+$headers = @{
+    "Content-Type" = "application/json"
+    "Authorization" = "Bearer $env:MINIMAX_API_KEY"
+}
+curl.exe -x http://localhost:8888 -U admin:password123 `
+    --data-binary @test/claude_request.json `
+    -H "Content-Type: application/json" `
+    -H "Authorization: Bearer $env:MINIMAX_API_KEY" `
+    https://api.minimaxi.com/anthropic/v1/messages
+```
+
 **访问历史返回字段：**
 ```json
 {
@@ -129,7 +146,7 @@ curl.exe "http://localhost:8082/unilink/access/ac/history?limit=10"
 |--------|--------|----------|------|
 | proxy.host | 127.0.0.1 | PROXY_HOST | 代理端地址 |
 | proxy.port | 8889 | PROXY_PORT | 代理端 WebSocket 端口 |
-| proxy.ws-path | /worker | PROXY_WS_PATH | WebSocket 路径 |
+| proxy.ws-path | /unilink/worker | PROXY_WS_PATH | WebSocket 路径 |
 | proxy.ssl | false | PROXY_SSL | 是否使用 wss |
 | proxy.auto-reconnect | true | PROXY_AUTO_RECONNECT | 是否自动重连 |
 | proxy.heartbeat-interval | 30 | PROXY_HEARTBEAT_INTERVAL | 心跳间隔(秒) |

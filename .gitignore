@@ -1,3 +1,4 @@
 .claude
 target/
 /logs
+test/config.ps1

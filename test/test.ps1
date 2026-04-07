@@ -1,5 +1,11 @@
 $ErrorActionPreference = "Continue"
 
+# MiniMax API Key (set from config file if not in environment)
+$script:MinimaxApiKey = $env:MINIMAX_API_KEY
+if (-not $script:MinimaxApiKey -and (Test-Path "$PSScriptRoot\config.ps1")) {
+    . "$PSScriptRoot\config.ps1"
+}
+
 # 1. Stop existing services
 Write-Host "=== Stopping existing services ===" -ForegroundColor Yellow
 .\test\stop.ps1
@@ -126,6 +132,22 @@ $r = Invoke-Curl -Proxy "http://localhost:8888" -ProxyAuth "admin:password123" -
 $ok = ($r[1] -lt 5)
 Write-Host "EXIT: $($r[0]), TIME: $($r[1])s (expected: < 5s)" -ForegroundColor $(if ($ok) { "Green" } else { "Red" })
 if ($ok) { $passed++ }
+
+# --- MiniMax API via SOCKS5 proxy (streaming) ---
+$total++
+Write-Host ""
+Write-Host "--- MiniMax API via SOCKS5 proxy (streaming) ---" -ForegroundColor Cyan
+if (-not $env:MINIMAX_API_KEY) {
+    Write-Host "SKIP: MINIMAX_API_KEY not set" -ForegroundColor DarkGray
+} else {
+    $minimaxSocksCmd = "curl.exe -s --max-time 300 -o nul -x socks5h://127.0.0.1:1080 -U socks5:password --data-binary @test\claude_request.json -H `"Content-Type: application/json`" -H `"Authorization: Bearer `+$env:MINIMAX_API_KEY+`" https://api.minimaxi.com/anthropic/v1/messages"
+    $process = Start-Process cmd -ArgumentList "/c", $minimaxSocksCmd -NoNewWindow -Wait -PassThru
+    $exitCode = $process.ExitCode
+    $httpCode = if ($exitCode -eq 0) { "200" } else { "FAIL($exitCode)" }
+    $ok = ($exitCode -eq 0)
+    Write-Host "EXIT: $exitCode, HTTP: $httpCode (expected: EXIT=0, HTTP=200)" -ForegroundColor $(if ($ok) { "Green" } else { "Red" })
+    if ($ok) { $passed++ }
+}
 
 # --- Access history query ---
 Write-Host ""
