@@ -11,7 +11,7 @@ import java.util.Map;
 import java.util.Set;
 
 @RestController
-@RequestMapping("/api/access")
+@RequestMapping("/unilink/access")
 public class HistoryController {
 
     @Autowired

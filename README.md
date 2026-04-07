@@ -67,8 +67,8 @@ curl.exe -x socks5://127.0.0.1:1080 -s -o $null https://www.baidu.com
 curl.exe -x socks5h://127.0.0.1:1080 -U socks5:password -s -o $null https://baidu.co
 
 # 查询访问历史（Proxy HTTP 端口 8082）
-curl.exe http://localhost:8082/api/access/with-history
-curl.exe "http://localhost:8082/api/access/ac/history?limit=10"
+curl.exe http://localhost:8082/unilink/access/with-history
+curl.exe "http://localhost:8082/unilink/access/ac/history?limit=10"
 ```
 
 **访问历史返回字段：**
@@ -101,7 +101,7 @@ curl.exe "http://localhost:8082/api/access/ac/history?limit=10"
 | access.socks5.auth.password | password | ACCESS_SOCKS5_AUTH_PASSWORD | SOCKS5 密码 |
 | proxy.host | localhost | PROXY_HOST | 代理端地址 |
 | proxy.port | 8889 | PROXY_PORT | 代理端 WebSocket 端口 |
-| proxy.ws-path | /access | PROXY_WS_PATH | WebSocket 路径 |
+| proxy.ws-path | /unilink/access | PROXY_WS_PATH | WebSocket 路径 |
 | proxy.ssl | false | PROXY_SSL | 是否使用 wss |
 | proxy.auto-reconnect | true | PROXY_AUTO_RECONNECT | 是否自动重连 |
 | proxy.heartbeat-interval | 30 | PROXY_HEARTBEAT_INTERVAL | 心跳间隔(秒) |
@@ -116,8 +116,8 @@ curl.exe "http://localhost:8082/api/access/ac/history?limit=10"
 | 配置项 | 默认值 | 说明 |
 |--------|--------|------|
 | proxy.websocket.port | 8889 | WebSocket 端口 |
-| proxy.websocket.access-path | /access | 接入端连接路径 |
-| proxy.websocket.worker-path | /worker | 工作端连接路径 |
+| proxy.websocket.access-path | /unilink/access | 接入端连接路径 |
+| proxy.websocket.worker-path | /unilink/worker | 工作端连接路径 |
 | proxy.websocket.heartbeat-interval | 30 | 心跳间隔(秒) |
 | proxy.websocket.heartbeat-timeout | 60 | 心跳超时(秒) |
 

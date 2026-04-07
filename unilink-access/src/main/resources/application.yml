@@ -30,7 +30,7 @@ access:
 proxy:
   host: ${PROXY_HOST:localhost}
   port: ${PROXY_PORT:8889}
-  ws-path: ${PROXY_WS_PATH:/access}
+  ws-path: ${PROXY_WS_PATH:/unilink/access}
   ssl: ${PROXY_SSL:false}
   auto-reconnect: ${PROXY_AUTO_RECONNECT:true}
   heartbeat-interval: ${PROXY_HEARTBEAT_INTERVAL:30}

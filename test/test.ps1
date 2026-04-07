@@ -131,11 +131,11 @@ if ($ok) { $passed++ }
 Write-Host ""
 Write-Host "--- Access history query ---" -ForegroundColor Cyan
 $total++
-$historyIds = curl.exe -s http://localhost:8082/api/access/with-history
+$historyIds = curl.exe -s http://localhost:8082/unilink/access/with-history
 Write-Host "Access IDs: $historyIds" -ForegroundColor Yellow
 if ($historyIds -match '"ac"') {
-    Write-Host "Query: curl.exe http://localhost:8082/api/access/ac/history?limit=10" -ForegroundColor DarkGray
-    $historyJson = curl.exe -s "http://localhost:8082/api/access/ac/history?limit=10"
+    Write-Host "Query: curl.exe http://localhost:8082/unilink/access/ac/history?limit=10" -ForegroundColor DarkGray
+    $historyJson = curl.exe -s "http://localhost:8082/unilink/access/ac/history?limit=10"
     Write-Host $historyJson -ForegroundColor Yellow
     if ($historyJson -match '"protocol"' -and $historyJson -match '"url"' -and $historyJson -match '"success"') {
         Write-Host "PASS: history contains protocol/url/success fields" -ForegroundColor Green

@@ -16,7 +16,7 @@ logging:
 proxy:
   host: ${PROXY_HOST:127.0.0.1}
   port: ${PROXY_PORT:8889}
-  ws-path: ${PROXY_WS_PATH:/worker}
+  ws-path: ${PROXY_WS_PATH:/unilink/worker}
   ssl: ${PROXY_SSL:false}
   auto-reconnect: ${PROXY_AUTO_RECONNECT:true}
   heartbeat-interval: ${PROXY_HEARTBEAT_INTERVAL:30}

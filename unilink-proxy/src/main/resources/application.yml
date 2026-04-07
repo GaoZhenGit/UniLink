@@ -12,7 +12,7 @@ logging:
 proxy:
   websocket:
     port: ${PROXY_WEBSOCKET_PORT:8889}
-    access-path: ${PROXY_WEBSOCKET_ACCESS_PATH:/access}
-    worker-path: ${PROXY_WEBSOCKET_WORKER_PATH:/worker}
+    access-path: ${PROXY_WEBSOCKET_ACCESS_PATH:/unilink/access}
+    worker-path: ${PROXY_WEBSOCKET_WORKER_PATH:/unilink/worker}
     heartbeat-interval: ${PROXY_WEBSOCKET_HEARTBEAT_INTERVAL:30}
     heartbeat-timeout: ${PROXY_WEBSOCKET_HEARTBEAT_TIMEOUT:60}
