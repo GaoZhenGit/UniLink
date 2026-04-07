@@ -96,53 +96,44 @@ unilink-worker/src/main/java/com/unilink/worker/
 
 ## 测试方法
 
-**HTTP 代理**
+**完整自动化测试（推荐）：**
 ```powershell
-# HTTP 请求
-curl.exe -x http://localhost:8888 -U admin:password123 https://httpbin.org/get
-
-# HTTPS 请求（HTTP CONNECT 隧道）
-curl.exe -x http://localhost:8888 -U admin:password123 https://httpbin.org/get
+.\test\test.ps1
 ```
+> 脚本自动执行：构建 → 启动服务 → 运行全部测试用例 → 查询历史 → 停止服务
 
-**SOCKS5 代理（SOCKS5 鉴权默认开启，用户名: `socks5`，密码: `password`）**
+**单独执行测试命令：**
 ```powershell
-# SOCKS5 + 远程 DNS 解析（DNS 由代理服务器解析）
-curl.exe -x socks5h://127.0.0.1:1080 -U socks5:password https://www.baidu.com
+# HTTP CONNECT 正常请求
+curl.exe -x http://localhost:8888 -U admin:password123 -s -o $null -w "status:%{http_code}" https://httpbin.org/get
 
-# SOCKS5 + 本地 DNS 解析
-curl.exe -x socks5://127.0.0.1:1080 -U socks5:password https://www.baidu.com
-```
+# SOCKS5 正常请求（远程 DNS，鉴权默认开启）
+curl.exe -x socks5h://127.0.0.1:1080 -U socks5:password -s -o $null -w "status:%{http_code}" https://www.baidu.com
 
-**错误场景（验证快速失败）**
-```powershell
-# 不存在的域名，代理端应在连接超时内快速失败（约 30s）
-curl.exe -x socks5h://127.0.0.1:1080 -U socks5:password https://baidu.co
+# SOCKS5 无认证（应被拒绝，exit code 97）
+curl.exe -x socks5://127.0.0.1:1080 -s -o $null https://www.baidu.com
 
-# 连接被拒绝（不存在的端口），应立即返回
-curl.exe -x socks5h://127.0.0.1:1080 -U socks5:password https://httpbin.org:19999
-```
+# DNS 解析失败（应快速失败，约 1s）
+curl.exe -x socks5h://127.0.0.1:1080 -U socks5:password -s -o $null https://baidu.co
 
-**访问历史查询（Proxy HTTP 端口 8082）**
-```powershell
-# 查询有历史的 access ID 列表
+# 查询访问历史（Proxy HTTP 端口 8082）
 curl.exe http://localhost:8082/api/access/with-history
-
-# 查询指定 access 的访问历史（返回 protocol/url/statusCode/success/timestamp）
-curl.exe "http://localhost:8082/api/access/{accessId}/history?limit=10"
+curl.exe "http://localhost:8082/api/access/ac/history?limit=10"
 ```
 
 ## 注意事项
 
-- 本项目允许你自动构建、启动服务，测试，分析日志，排查问题，我推荐以下顺序步骤：
+- 本项目允许你自动构建、启动服务，测试，分析日志，排查问题，推荐使用完整测试脚本：
 ```
-.\test\stop.ps1 #结束三个服务
-del .\logs\* #清空历史日志文件
-mvn clean package #构建jar包
-.\test\start.ps1 #按顺序启动proxy、worker、access
-# 启动命令结束后等10秒，完成ws连接
-# 使用curl.exe执行多次http代理测试（至少5次）
-# 使用curl.exe执行多次socks5代理测试（至少5次）
-# 查看 @\logs下的日志，并分析问题
-.\test\stop.ps1 #结束三个服务
+.\test\test.ps1    # 自动构建 + 启动 + 运行全部测试用例 + 查询历史 + 停止
+```
+> 也可手动分步执行：
+```
+.\test\stop.ps1
+del .\logs\*
+mvn clean package
+.\test\start.ps1
+# 等10秒完成ws连接
+curl.exe 手动测试...
+.\test\stop.ps1
 ```
