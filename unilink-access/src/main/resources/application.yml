@@ -20,6 +20,13 @@ access:
       enabled: ${ACCESS_HTTP_BASIC_AUTH_ENABLED:true}
       username: ${ACCESS_HTTP_BASIC_AUTH_USERNAME:admin}
       password: ${ACCESS_HTTP_BASIC_AUTH_PASSWORD:password123}
+  socks5:
+    enabled: ${ACCESS_SOCKS5_ENABLED:true}
+    port: ${ACCESS_SOCKS5_PORT:1080}
+    auth:
+      enabled: ${ACCESS_SOCKS5_AUTH_ENABLED:false}
+      username: ${ACCESS_SOCKS5_AUTH_USERNAME:socks5}
+      password: ${ACCESS_SOCKS5_AUTH_PASSWORD:password}
 proxy:
   host: ${PROXY_HOST:localhost}
   port: ${PROXY_PORT:8889}

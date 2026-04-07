@@ -4,6 +4,7 @@ import com.fasterxml.jackson.databind.ObjectMapper;
 import com.unilink.access.config.AccessConfig;
 import com.unilink.access.config.AccessProxyConfig;
 import com.unilink.access.server.HttpRequestHandler;
+import com.unilink.access.server.Socks5RequestHandler;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -42,6 +43,9 @@ public class AccessWebSocketClient {
     @Autowired
     private HttpRequestHandler requestHandler;
 
+    @Autowired
+    private Socks5RequestHandler socks5RequestHandler;
+
     private WebSocketSession session;
     private final AtomicBoolean connected = new AtomicBoolean(false);
     private ScheduledExecutorService heartbeatScheduler;
@@ -52,6 +56,7 @@ public class AccessWebSocketClient {
 
     private int currentRetryDelay = 1000;
     private Map<String, Object> pendingMessage;
+    private Map<String, Object> pendingTunnelMessage;
 
     @PostConstruct
     public void connect() {
@@ -224,6 +229,22 @@ public class AccessWebSocketClient {
                     requestHandler.sendTunnelDataToClient((String) msg.get("msgId"), null);
                 }
                 break;
+            case "socks5_response":
+                // SOCKS5 连接响应
+                pendingTunnelMessage = msg;
+                int socks5RespLen = msg.get("bodyLen") != null ? ((Number) msg.get("bodyLen")).intValue() : 0;
+                if (socks5RespLen == 0) {
+                    handleSocks5Response(msg, null);
+                }
+                break;
+            case "socks5_tunnel_data":
+                // SOCKS5 隧道数据
+                pendingTunnelMessage = msg;
+                int socks5TunnelLen = msg.get("bodyLen") != null ? ((Number) msg.get("bodyLen")).intValue() : 0;
+                if (socks5TunnelLen == 0) {
+                    socks5RequestHandler.handleTunnelData((String) msg.get("msgId"), null);
+                }
+                break;
             case "heartbeat":
                 handleHeartbeat();
                 break;
@@ -238,7 +259,16 @@ public class AccessWebSocketClient {
     private void handleBinaryMessagePayload(BinaryMessage message) throws Exception {
         byte[] body = message.getPayload().array();
 
-        if (pendingMessage != null) {
+        // 检查是否有待处理的 SOCKS5 隧道数据
+        if (pendingTunnelMessage != null) {
+            String type = (String) pendingTunnelMessage.get("type");
+            if ("socks5_response".equals(type)) {
+                handleSocks5Response(pendingTunnelMessage, body);
+            } else if ("socks5_tunnel_data".equals(type)) {
+                socks5RequestHandler.handleTunnelData((String) pendingTunnelMessage.get("msgId"), body);
+            }
+            pendingTunnelMessage = null;
+        } else if (pendingMessage != null) {
             String type = (String) pendingMessage.get("type");
             if ("tunnel_data".equals(type)) {
                 requestHandler.sendTunnelDataToClient((String) pendingMessage.get("msgId"), body);
@@ -247,6 +277,12 @@ public class AccessWebSocketClient {
             }
             pendingMessage = null;
         }
+    }
+
+    private void handleSocks5Response(Map<String, Object> msg, byte[] body) {
+        String msgId = (String) msg.get("msgId");
+        int statusCode = msg.get("statusCode") != null ? ((Number) msg.get("statusCode")).intValue() : 0;
+        socks5RequestHandler.handleSocks5Response(msgId, statusCode, null);
     }
 
     @SuppressWarnings("unchecked")

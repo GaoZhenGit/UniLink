@@ -130,6 +130,23 @@ public class WorkerHandler extends TextWebSocketFrameHandler {
                 // 转发到 access
                 sessionRouter.forwardTextToAccess(ctx.channel(), text);
                 break;
+            case "socks5_response":
+                // SOCKS5 连接响应，转发到 access
+                log.debug("收到 SOCKS5 响应: msgId={}, status={}", msg.get("msgId"), msg.get("status"));
+                int socks5RespBodyLen = msg.get("bodyLen") != null ? ((Number) msg.get("bodyLen")).intValue() : 0;
+                if (socks5RespBodyLen > 0) {
+                    sessionRouter.setPendingBinaryTarget(ctx.channel().id().asShortText(), "toAccess");
+                }
+                sessionRouter.forwardTextToAccess(ctx.channel(), text);
+                break;
+            case "socks5_tunnel_data":
+                // SOCKS5 隧道数据，转发到 access
+                int socks5TunnelBodyLen = msg.get("bodyLen") != null ? ((Number) msg.get("bodyLen")).intValue() : 0;
+                if (socks5TunnelBodyLen > 0) {
+                    sessionRouter.setPendingBinaryTarget(ctx.channel().id().asShortText(), "toAccess");
+                }
+                sessionRouter.forwardTextToAccess(ctx.channel(), text);
+                break;
             default:
                 // 其他消息直接转发
                 sessionRouter.forwardTextToAccess(ctx.channel(), text);

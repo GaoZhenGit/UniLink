@@ -58,6 +58,7 @@ public class WorkerWebSocketClient {
 
     private int currentRetryDelay = 1000; // 默认1秒
     private Map<String, Object> pendingHttpRequest;
+    private Map<String, Object> pendingTunnelRequest;
 
     @PostConstruct
     public void connect() {
@@ -214,11 +215,27 @@ public class WorkerWebSocketClient {
                 }
                 break;
             case "tunnel_data":
-                // 隧道数据，直接处理
+                // HTTP CONNECT 隧道数据
                 pendingHttpRequest = msg;
                 int tunnelBodyLen = msg.get("bodyLen") != null ? ((Number) msg.get("bodyLen")).intValue() : 0;
                 if (tunnelBodyLen == 0) {
                     messageHandler.handleTunnelData((String) msg.get("msgId"), new byte[0]);
+                }
+                break;
+            case "socks5_connect":
+                // SOCKS5 连接请求
+                pendingTunnelRequest = msg;
+                int socks5BodyLen = msg.get("bodyLen") != null ? ((Number) msg.get("bodyLen")).intValue() : 0;
+                if (socks5BodyLen == 0) {
+                    messageHandler.handleSocks5Connect(msg);
+                }
+                break;
+            case "socks5_tunnel_data":
+                // SOCKS5 隧道数据
+                pendingTunnelRequest = msg;
+                int socks5TunnelBodyLen = msg.get("bodyLen") != null ? ((Number) msg.get("bodyLen")).intValue() : 0;
+                if (socks5TunnelBodyLen == 0) {
+                    messageHandler.handleSocks5TunnelData((String) msg.get("msgId"), new byte[0]);
                 }
                 break;
             case "heartbeat":
@@ -235,7 +252,18 @@ public class WorkerWebSocketClient {
     private void handleBinaryMessagePayload(BinaryMessage message) throws Exception {
         byte[] body = message.getPayload().array();
 
-        if (pendingHttpRequest != null) {
+        // 检查是否有待处理的 SOCKS5 隧道数据
+        if (pendingTunnelRequest != null) {
+            String type = (String) pendingTunnelRequest.get("type");
+            String msgId = (String) pendingTunnelRequest.get("msgId");
+
+            if ("socks5_connect".equals(type)) {
+                messageHandler.handleSocks5Connect(pendingTunnelRequest);
+            } else if ("socks5_tunnel_data".equals(type)) {
+                messageHandler.handleSocks5TunnelData(msgId, body);
+            }
+            pendingTunnelRequest = null;
+        } else if (pendingHttpRequest != null) {
             String type = (String) pendingHttpRequest.get("type");
             String msgId = (String) pendingHttpRequest.get("msgId");
 
