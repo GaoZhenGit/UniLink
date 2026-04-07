@@ -57,6 +57,7 @@ public class AccessWebSocketClient {
     private int currentRetryDelay = 1000;
     private Map<String, Object> pendingMessage;
     private Map<String, Object> pendingTunnelMessage;
+    private Map<String, Object> pendingSocks5Response;
 
     @PostConstruct
     public void connect() {
@@ -230,11 +231,12 @@ public class AccessWebSocketClient {
                 }
                 break;
             case "socks5_response":
-                // SOCKS5 连接响应
-                pendingTunnelMessage = msg;
+                // SOCKS5 连接响应（使用独立变量，避免被 tunnel_data 覆盖）
+                pendingSocks5Response = msg;
                 int socks5RespLen = msg.get("bodyLen") != null ? ((Number) msg.get("bodyLen")).intValue() : 0;
                 if (socks5RespLen == 0) {
                     handleSocks5Response(msg, null);
+                    pendingSocks5Response = null;
                 }
                 break;
             case "socks5_tunnel_data":
@@ -259,14 +261,13 @@ public class AccessWebSocketClient {
     private void handleBinaryMessagePayload(BinaryMessage message) throws Exception {
         byte[] body = message.getPayload().array();
 
-        // 检查是否有待处理的 SOCKS5 隧道数据
-        if (pendingTunnelMessage != null) {
-            String type = (String) pendingTunnelMessage.get("type");
-            if ("socks5_response".equals(type)) {
-                handleSocks5Response(pendingTunnelMessage, body);
-            } else if ("socks5_tunnel_data".equals(type)) {
-                socks5RequestHandler.handleTunnelData((String) pendingTunnelMessage.get("msgId"), body);
-            }
+        // SOCKS5 响应优先处理（使用独立变量，不会被 tunnel_data 覆盖）
+        if (pendingSocks5Response != null) {
+            handleSocks5Response(pendingSocks5Response, body);
+            pendingSocks5Response = null;
+        } else if (pendingTunnelMessage != null) {
+            // SOCKS5 隧道数据
+            socks5RequestHandler.handleTunnelData((String) pendingTunnelMessage.get("msgId"), body);
             pendingTunnelMessage = null;
         } else if (pendingMessage != null) {
             String type = (String) pendingMessage.get("type");
@@ -281,8 +282,8 @@ public class AccessWebSocketClient {
 
     private void handleSocks5Response(Map<String, Object> msg, byte[] body) {
         String msgId = (String) msg.get("msgId");
-        int statusCode = msg.get("statusCode") != null ? ((Number) msg.get("statusCode")).intValue() : 0;
-        socks5RequestHandler.handleSocks5Response(msgId, statusCode, null);
+        int status = msg.get("status") != null ? ((Number) msg.get("status")).intValue() : 0;
+        socks5RequestHandler.handleSocks5Response(msgId, status, null);
     }
 
     @SuppressWarnings("unchecked")

@@ -1,19 +1,24 @@
 package com.unilink.worker.tunnel;
 
 import com.unilink.worker.client.WorkerWebSocketClient;
+import com.unilink.worker.config.WorkerConfig;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Component;
 
 import java.io.IOException;
+import java.net.InetAddress;
 import java.net.InetSocketAddress;
+import java.net.SocketTimeoutException;
 import java.nio.ByteBuffer;
 import java.nio.channels.SocketChannel;
 import java.util.Map;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
+import java.util.concurrent.Future;
+import java.util.concurrent.TimeUnit;
 
 @Component
 public class ConnectTunnelHandler {
@@ -23,6 +28,9 @@ public class ConnectTunnelHandler {
     @Autowired
     private WorkerWebSocketClient wsClient;
 
+    @Autowired
+    private WorkerConfig workerConfig;
+
     private final ExecutorService executor = Executors.newCachedThreadPool();
     private final Map<String, TunnelContext> activeTunnels = new ConcurrentHashMap<>();
 
@@ -31,37 +39,52 @@ public class ConnectTunnelHandler {
 
         executor.submit(() -> {
             SocketChannel targetChannel = null;
+            int connectTimeout = workerConfig.getHttp().getConnectTimeout();
             try {
+                // DNS 解析也需要超时（getByName 本身不受 socket 超时控制）
+                InetAddress[] addresses = dnsLookupWithTimeout(host, connectTimeout);
+
                 // 建立到目标服务器的连接
                 targetChannel = SocketChannel.open();
-                targetChannel.configureBlocking(true);
-                targetChannel.connect(new InetSocketAddress(host, port));
+                targetChannel.socket().connect(new InetSocketAddress(addresses[0], port), connectTimeout);
 
-                if (targetChannel.finishConnect()) {
-                    log.info("CONNECT隧道建立成功: {}:{}", host, port);
+                // 保存隧道上下文
+                TunnelContext ctx = new TunnelContext(msgId, targetChannel);
+                activeTunnels.put(msgId, ctx);
 
-                    // 保存隧道上下文
-                    TunnelContext ctx = new TunnelContext(msgId, targetChannel);
-                    activeTunnels.put(msgId, ctx);
+                // 发送200响应给Proxy
+                sendConnectResponse(msgId, 200, "Connection Established");
 
-                    // 发送200响应给Proxy
-                    sendConnectResponse(msgId, 200, "Connection Established");
-
-                    // 启动双向转发
-                    startForwarding(ctx);
-                } else {
-                    sendConnectResponse(msgId, 502, "Failed to connect to target");
-                }
+                // 启动双向转发
+                startForwarding(ctx);
+            } catch (SocketTimeoutException e) {
+                log.warn("CONNECT 连接超时: {}:{} (超时={}ms)", host, port, connectTimeout);
+                sendConnectResponse(msgId, 504, "Gateway Timeout");
+                closeQuietly(targetChannel);
             } catch (Exception e) {
                 log.error("CONNECT隧道建立失败: {}:{}", host, port, e);
                 sendConnectResponse(msgId, 502, e.getMessage());
-                if (targetChannel != null) {
-                    try {
-                        targetChannel.close();
-                    } catch (IOException ignored) {}
-                }
+                closeQuietly(targetChannel);
             }
         });
+    }
+
+    private InetAddress[] dnsLookupWithTimeout(String host, int timeoutMs) throws Exception {
+        ExecutorService dnsExecutor = Executors.newSingleThreadExecutor();
+        try {
+            Future<InetAddress[]> future = dnsExecutor.submit(() -> InetAddress.getAllByName(host));
+            return future.get(timeoutMs, TimeUnit.MILLISECONDS);
+        } finally {
+            dnsExecutor.shutdownNow();
+        }
+    }
+
+    private void closeQuietly(SocketChannel channel) {
+        if (channel != null) {
+            try {
+                channel.close();
+            } catch (IOException ignored) {}
+        }
     }
 
     private void sendConnectResponse(String msgId, int statusCode, String message) {

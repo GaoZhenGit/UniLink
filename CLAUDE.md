@@ -96,18 +96,40 @@ unilink-worker/src/main/java/com/unilink/worker/
 
 ## 测试方法
 
+**HTTP 代理**
 ```powershell
-# HTTP 测试
-curl.exe -x http://localhost:8888 -U admin:password123 -v http://httpbin.org/get
+# HTTP 请求
+curl.exe -x http://localhost:8888 -U admin:password123 https://httpbin.org/get
 
-# HTTPS 测试
-curl.exe -x http://localhost:8888 -U admin:password123 -v https://httpbin.org/get
+# HTTPS 请求（HTTP CONNECT 隧道）
+curl.exe -x http://localhost:8888 -U admin:password123 https://httpbin.org/get
+```
 
-# SOCKS5 测试（远程 DNS 解析，DNS 由代理服务器解析）
-curl.exe -x socks5h://127.0.0.1:1080 https://www.baidu.com
+**SOCKS5 代理（SOCKS5 鉴权默认开启，用户名: `socks5`，密码: `password`）**
+```powershell
+# SOCKS5 + 远程 DNS 解析（DNS 由代理服务器解析）
+curl.exe -x socks5h://127.0.0.1:1080 -U socks5:password https://www.baidu.com
 
-# SOCKS5 测试（本地 DNS 解析）
-curl.exe -x socks5://127.0.0.1:1080 https://www.baidu.com
+# SOCKS5 + 本地 DNS 解析
+curl.exe -x socks5://127.0.0.1:1080 -U socks5:password https://www.baidu.com
+```
+
+**错误场景（验证快速失败）**
+```powershell
+# 不存在的域名，代理端应在连接超时内快速失败（约 30s）
+curl.exe -x socks5h://127.0.0.1:1080 -U socks5:password https://baidu.co
+
+# 连接被拒绝（不存在的端口），应立即返回
+curl.exe -x socks5h://127.0.0.1:1080 -U socks5:password https://httpbin.org:19999
+```
+
+**访问历史查询（Proxy HTTP 端口 8082）**
+```powershell
+# 查询有历史的 access ID 列表
+curl.exe http://localhost:8082/api/access/with-history
+
+# 查询指定 access 的访问历史（返回 protocol/url/statusCode/success/timestamp）
+curl.exe "http://localhost:8082/api/access/{accessId}/history?limit=10"
 ```
 
 ## 注意事项

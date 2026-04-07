@@ -126,22 +126,18 @@ public class Socks5ChannelHandler extends ChannelInboundHandlerAdapter {
         ctx.writeAndFlush(response);
 
         if (selectedMethod == AUTH_NO_AUTH) {
-            // 无认证，直接进入连接请求阶段
-            log.debug("SOCKS5 无认证模式");
+            log.info("SOCKS5 无认证模式");
             state = Socks5State.CONNECT_REQUEST;
-            // 检查缓冲区是否有后续数据
             if (buf.readableBytes() > 0) {
                 channelRead(ctx, buf);
             }
         } else if (selectedMethod == AUTH_PASSWORD) {
-            // 用户名密码认证
-            log.debug("SOCKS5 用户名密码认证模式");
+            log.info("SOCKS5 用户名密码认证模式");
             state = Socks5State.AUTHENTICATION;
             if (buf.readableBytes() > 0) {
                 channelRead(ctx, buf);
             }
         } else if (selectedMethod == AUTH_NO_ACCEPTABLE) {
-            // 不支持任何方法
             log.warn("SOCKS5 不支持任何认证方法");
             ctx.close();
         }
@@ -151,19 +147,27 @@ public class Socks5ChannelHandler extends ChannelInboundHandlerAdapter {
      * 选择认证方法
      */
     private byte selectAuthMethod(byte[] clientMethods) {
-        // 检查是否支持 Basic Auth
         if (accessConfig.getSocks5().getAuth().isEnabled()) {
+            // 鉴权开启时，只接受用户名密码认证
             for (byte m : clientMethods) {
                 if (m == AUTH_PASSWORD) {
                     return AUTH_PASSWORD;
                 }
             }
+            // curl 不提供 AUTH_PASSWORD，拒绝
+            return AUTH_NO_ACCEPTABLE;
         }
 
-        // 尝试无认证
+        // 鉴权关闭时，优先无认证
         for (byte m : clientMethods) {
             if (m == AUTH_NO_AUTH) {
                 return AUTH_NO_AUTH;
+            }
+        }
+        // 其次用户名密码
+        for (byte m : clientMethods) {
+            if (m == AUTH_PASSWORD) {
+                return AUTH_PASSWORD;
             }
         }
 
@@ -360,8 +364,20 @@ public class Socks5ChannelHandler extends ChannelInboundHandlerAdapter {
         }
 
         log.warn("SOCKS5 隧道建立失败: {}:{}, status={}", remoteHost, remotePort, status);
-        sendCommandResponse(ctx, status);
-        ctx.close();
+        // 确保响应发送完成后再关闭连接
+        ctx.writeAndFlush(sendCommandResponseBuf(ctx, status))
+           .addListener(ChannelFutureListener.CLOSE);
+    }
+
+    private ByteBuf sendCommandResponseBuf(ChannelHandlerContext ctx, byte status) {
+        ByteBuf buf = ctx.alloc().buffer(10);
+        buf.writeByte(0x05); // VER
+        buf.writeByte(status); // REP
+        buf.writeByte(0x00); // RSV
+        buf.writeByte(ATYP_IPV4); // ATYP = IPv4
+        buf.writeBytes(new byte[]{0, 0, 0, 0}); // BND.ADDR
+        buf.writeShort(0); // BND.PORT
+        return buf;
     }
 
     /**

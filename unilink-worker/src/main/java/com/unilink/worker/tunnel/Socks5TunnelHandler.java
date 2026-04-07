@@ -1,6 +1,7 @@
 package com.unilink.worker.tunnel;
 
 import com.unilink.worker.client.WorkerWebSocketClient;
+import com.unilink.worker.config.WorkerConfig;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -8,6 +9,7 @@ import org.springframework.stereotype.Component;
 
 import java.io.IOException;
 import java.net.InetSocketAddress;
+import java.net.SocketTimeoutException;
 import java.nio.ByteBuffer;
 import java.nio.channels.SocketChannel;
 import java.util.Map;
@@ -24,8 +26,22 @@ public class Socks5TunnelHandler {
 
     private static final Logger log = LoggerFactory.getLogger(Socks5TunnelHandler.class);
 
+    // SOCKS5 回复状态码
+    private static final byte REP_SUCCESS = 0x00;
+    private static final byte REP_GENERAL_FAILURE = 0x01;
+    private static final byte REP_CONNECTION_NOT_ALLOWED = 0x02;
+    private static final byte REP_NETWORK_UNREACHABLE = 0x03;
+    private static final byte REP_HOST_UNREACHABLE = 0x04;
+    private static final byte REP_CONNECTION_REFUSED = 0x05;
+    private static final byte REP_TTL_EXPIRED = 0x06;
+    private static final byte REP_COMMAND_NOT_SUPPORTED = 0x07;
+    private static final byte REP_ADDRESS_TYPE_NOT_SUPPORTED = 0x08;
+
     @Autowired
     private WorkerWebSocketClient wsClient;
+
+    @Autowired
+    private WorkerConfig workerConfig;
 
     private final ExecutorService executor = Executors.newCachedThreadPool();
     private final Map<String, Socks5TunnelContext> activeTunnels = new ConcurrentHashMap<>();
@@ -39,35 +55,27 @@ public class Socks5TunnelHandler {
         executor.submit(() -> {
             SocketChannel targetChannel = null;
             try {
-                // 建立到目标服务器的连接
+                // 建立到目标服务器的连接（带超时）
                 targetChannel = SocketChannel.open();
-                targetChannel.configureBlocking(true);
-                targetChannel.connect(new InetSocketAddress(host, port));
+                int connectTimeout = workerConfig.getHttp().getConnectTimeout();
+                targetChannel.socket().connect(new InetSocketAddress(host, port), connectTimeout);
 
-                if (targetChannel.finishConnect()) {
-                    log.info("SOCKS5 隧道建立成功: {}:{}", host, port);
+                // 发送 SOCKS5 成功响应给 Proxy
+                sendSocks5Response(msgId, (byte) 0x00); // SUCCESS
 
-                    // 保存隧道上下文
-                    Socks5TunnelContext ctx = new Socks5TunnelContext(msgId, targetChannel);
-                    activeTunnels.put(msgId, ctx);
-
-                    // 发送 SOCKS5 成功响应给 Proxy
-                    sendSocks5Response(msgId, (byte) 0x00); // SUCCESS
-
-                    // 启动双向转发
-                    startForwarding(ctx);
-                } else {
-                    sendSocks5Response(msgId, (byte) 0x01); // GENERAL_FAILURE
-                }
+                // 保存隧道上下文并启动转发
+                Socks5TunnelContext ctx = new Socks5TunnelContext(msgId, targetChannel);
+                activeTunnels.put(msgId, ctx);
+                startForwarding(ctx);
+            } catch (SocketTimeoutException e) {
+                log.warn("SOCKS5 连接超时: {}:{} (超时={}ms)", host, port, workerConfig.getHttp().getConnectTimeout());
+                sendSocks5Response(msgId, REP_TTL_EXPIRED);
+                closeQuietly(targetChannel);
             } catch (Exception e) {
                 log.error("SOCKS5 隧道建立失败: {}:{}", host, port, e);
                 byte status = determineFailureStatus(e);
                 sendSocks5Response(msgId, status);
-                if (targetChannel != null) {
-                    try {
-                        targetChannel.close();
-                    } catch (IOException ignored) {}
-                }
+                closeQuietly(targetChannel);
             }
         });
     }
@@ -77,14 +85,36 @@ public class Socks5TunnelHandler {
      */
     private byte determineFailureStatus(Exception e) {
         String msg = e.getMessage() != null ? e.getMessage().toLowerCase() : "";
-        if (msg.contains("refused")) {
-            return 0x05; // CONNECTION_REFUSED
-        } else if (msg.contains("unreachable")) {
-            return 0x03; // NETWORK_UNREACHABLE
-        } else if (msg.contains("timeout")) {
-            return 0x06; // TTL_EXPIRED
+        String className = e.getClass().getName();
+
+        // UnknownHostException / 无法解析域名
+        if (className.contains("UnknownHost") || msg.contains("unknown host") || msg.contains("no such host")) {
+            return REP_GENERAL_FAILURE;
         }
-        return 0x01; // GENERAL_FAILURE
+        // 连接被拒绝
+        if (msg.contains("refused") || msg.contains("connection refused")) {
+            return REP_CONNECTION_REFUSED;
+        }
+        // 网络不可达
+        if (msg.contains("unreachable") || className.contains("NoRouteToHost")) {
+            return REP_NETWORK_UNREACHABLE;
+        }
+        // 超时
+        if (msg.contains("timeout") || className.contains("SocketTimeoutException")) {
+            return REP_TTL_EXPIRED;
+        }
+        return REP_GENERAL_FAILURE;
+    }
+
+    /**
+     * 安全关闭 channel
+     */
+    private void closeQuietly(SocketChannel channel) {
+        if (channel != null) {
+            try {
+                channel.close();
+            } catch (IOException ignored) {}
+        }
     }
 
     /**

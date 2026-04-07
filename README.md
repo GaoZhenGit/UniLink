@@ -16,7 +16,7 @@
 - 支持 HTTP 和 HTTPS 代理
 - 支持 Basic Auth 认证
 - 支持 HTTPS CONNECT 隧道
-- 支持 SOCKS5 代理协议（支持无认证和用户名密码认证）
+- 支持 SOCKS5 代理协议（默认开启用户名密码认证）
 - WebSocket 长连接
 - 断线自动重连
 - 心跳保活
@@ -46,18 +46,40 @@ mvn clean package -DskipTests
 
 ### 测试
 
-```bash
+**HTTP 代理**
+```powershell
 # HTTP 请求
-curl -x http://localhost:8888 -U admin:password123 http://httpbin.org/get
+curl.exe -x http://localhost:8888 -U admin:password123 https://httpbin.org/get
 
-# HTTPS 请求
-curl -x http://localhost:8888 -U admin:password123 https://httpbin.org/get
+# HTTPS 请求（HTTP CONNECT 隧道）
+curl.exe -x http://localhost:8888 -U admin:password123 https://httpbin.org/get
+```
 
-# SOCKS5 请求（远程 DNS 解析，DNS 由代理服务器解析）
-curl.exe -x socks5h://127.0.0.1:1080 https://www.baidu.com
+**SOCKS5 代理（SOCKS5 鉴权默认开启，用户名: `socks5`，密码: `password`）**
+```powershell
+# SOCKS5 + 远程 DNS 解析（DNS 由代理服务器解析）
+curl.exe -x socks5h://127.0.0.1:1080 -U socks5:password https://www.baidu.com
 
-# SOCKS5 请求（本地 DNS 解析）
-curl.exe -x socks5://127.0.0.1:1080 https://www.baidu.com
+# SOCKS5 + 本地 DNS 解析
+curl.exe -x socks5://127.0.0.1:1080 -U socks5:password https://www.baidu.com
+```
+
+**错误场景（验证快速失败）**
+```powershell
+# 不存在的域名，代理端应在连接超时内快速失败（约 30s）
+curl.exe -x socks5h://127.0.0.1:1080 -U socks5:password https://baidu.co
+
+# 连接被拒绝（不存在的端口），应立即返回
+curl.exe -x socks5h://127.0.0.1:1080 -U socks5:password https://httpbin.org:19999
+```
+
+**访问历史查询（Proxy HTTP 端口 8082）**
+```powershell
+# 查询有历史的 access ID 列表
+curl.exe http://localhost:8082/api/access/with-history
+
+# 查询指定 access 的访问历史（返回 protocol/url/statusCode/success/timestamp）
+curl.exe "http://localhost:8082/api/access/{accessId}/history?limit=10"
 ```
 
 ## 配置说明
@@ -74,7 +96,7 @@ curl.exe -x socks5://127.0.0.1:1080 https://www.baidu.com
 | access.http.basic-auth.password | password123 | ACCESS_HTTP_BASIC_AUTH_PASSWORD | 密码 |
 | access.socks5.enabled | true | ACCESS_SOCKS5_ENABLED | 启用 SOCKS5 代理 |
 | access.socks5.port | 1080 | ACCESS_SOCKS5_PORT | SOCKS5 代理端口 |
-| access.socks5.auth.enabled | false | ACCESS_SOCKS5_AUTH_ENABLED | 启用 SOCKS5 用户名密码认证 |
+| access.socks5.auth.enabled | true | ACCESS_SOCKS5_AUTH_ENABLED | 启用 SOCKS5 用户名密码认证 |
 | access.socks5.auth.username | socks5 | ACCESS_SOCKS5_AUTH_USERNAME | SOCKS5 用户名 |
 | access.socks5.auth.password | password | ACCESS_SOCKS5_AUTH_PASSWORD | SOCKS5 密码 |
 | proxy.host | localhost | PROXY_HOST | 代理端地址 |

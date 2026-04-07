@@ -24,7 +24,7 @@ access:
     enabled: ${ACCESS_SOCKS5_ENABLED:true}
     port: ${ACCESS_SOCKS5_PORT:1080}
     auth:
-      enabled: ${ACCESS_SOCKS5_AUTH_ENABLED:false}
+      enabled: ${ACCESS_SOCKS5_AUTH_ENABLED:true}
       username: ${ACCESS_SOCKS5_AUTH_USERNAME:socks5}
       password: ${ACCESS_SOCKS5_AUTH_PASSWORD:password}
 proxy:
