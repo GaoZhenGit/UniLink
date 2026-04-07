@@ -23,7 +23,7 @@ public class Socks5ProxyServer {
     private AccessConfig accessConfig;
 
     @Autowired
-    private Socks5ChannelHandler socks5ChannelHandler;
+    private Socks5RequestHandler socks5RequestHandler;
 
     private Channel serverChannel;
     private EventLoopGroup bossGroup;
@@ -48,7 +48,8 @@ public class Socks5ProxyServer {
                         @Override
                         protected void initChannel(SocketChannel ch) {
                             ChannelPipeline pipeline = ch.pipeline();
-                            pipeline.addLast(socks5ChannelHandler);
+                            Socks5ChannelHandler handler = new Socks5ChannelHandler(accessConfig, socks5RequestHandler);
+                            pipeline.addLast(handler);
                         }
                     })
                     .option(ChannelOption.SO_BACKLOG, 128)

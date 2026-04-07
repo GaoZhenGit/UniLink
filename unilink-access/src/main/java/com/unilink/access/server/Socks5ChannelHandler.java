@@ -5,7 +5,6 @@ import io.netty.buffer.ByteBuf;
 import io.netty.channel.*;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
-import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Component;
 
 import java.net.InetSocketAddress;
@@ -16,8 +15,6 @@ import java.nio.charset.StandardCharsets;
  * SOCKS5 协议处理器
  * 实现完整的状态机：握手 -> 认证 -> 连接请求 -> 数据传输
  */
-@Component
-@ChannelHandler.Sharable
 public class Socks5ChannelHandler extends ChannelInboundHandlerAdapter {
 
     private static final Logger log = LoggerFactory.getLogger(Socks5ChannelHandler.class);
@@ -57,11 +54,13 @@ public class Socks5ChannelHandler extends ChannelInboundHandlerAdapter {
     private static final byte AUTH_PASSWORD = 0x02;
     private static final byte AUTH_NO_ACCEPTABLE = (byte) 0xFF;
 
-    @Autowired
-    private AccessConfig accessConfig;
+    private final AccessConfig accessConfig;
+    private final Socks5RequestHandler requestHandler;
 
-    @Autowired
-    private Socks5RequestHandler requestHandler;
+    public Socks5ChannelHandler(AccessConfig accessConfig, Socks5RequestHandler requestHandler) {
+        this.accessConfig = accessConfig;
+        this.requestHandler = requestHandler;
+    }
 
     private Socks5State state = Socks5State.GREETING;
     private String remoteHost;
