@@ -105,8 +105,19 @@ public class AccessHandler extends TextWebSocketFrameHandler {
                 sessionRouter.forwardTextToWorker(ctx.channel(), text);
                 break;
             case "socks5_connect":
-                // SOCKS5 连接请求，转发到 worker
-                log.debug("收到 SOCKS5 连接请求: msgId={}", msg.get("msgId"));
+                // SOCKS5 连接请求，转发到 worker，同时保存待处理请求信息用于记录历史
+                String socks5MsgId = (String) msg.get("msgId");
+                String socks5Host = (String) msg.get("host");
+                Integer socks5Port = msg.get("port") != null ? ((Number) msg.get("port")).intValue() : 443;
+                String socks5AccessId = sessionRouter.getAccessIdByChannel(ctx.channel().id().asShortText());
+                if (socks5MsgId != null && socks5AccessId != null) {
+                    Map<String, Object> socks5RequestInfo = new HashMap<>();
+                    socks5RequestInfo.put("accessId", socks5AccessId);
+                    socks5RequestInfo.put("host", socks5Host);
+                    socks5RequestInfo.put("port", socks5Port);
+                    socks5RequestInfo.put("timestamp", System.currentTimeMillis());
+                    sessionRouter.addPendingRequest(socks5MsgId, socks5RequestInfo);
+                }
                 sessionRouter.forwardTextToWorker(ctx.channel(), text);
                 break;
             case "socks5_tunnel_data":

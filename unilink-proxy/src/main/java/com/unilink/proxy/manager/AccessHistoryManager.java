@@ -24,6 +24,10 @@ public class AccessHistoryManager {
     private ProxyConfig config;
 
     public void recordAccess(String accessId, String url, int statusCode, boolean success) {
+        recordAccess(accessId, url, "HTTP", statusCode, success);
+    }
+
+    public void recordAccess(String accessId, String url, String protocol, int statusCode, boolean success) {
         if (accessId == null || accessId.isEmpty()) {
             return;
         }
@@ -32,6 +36,7 @@ public class AccessHistoryManager {
         AccessHistoryEntry entry = new AccessHistoryEntry();
         entry.setAccessId(accessId);
         entry.setUrl(url);
+        entry.setProtocol(protocol);
         entry.setStatusCode(statusCode);
         entry.setSuccess(success);
         entry.setTimestamp(System.currentTimeMillis());
@@ -45,8 +50,8 @@ public class AccessHistoryManager {
             history.add(entry);
         }
 
-        log.debug("记录访问历史: accessId={}, url={}, status={}, success={}",
-                accessId, url, statusCode, success);
+        log.debug("记录访问历史: accessId={}, protocol={}, url={}, status={}, success={}",
+                accessId, protocol, url, statusCode, success);
     }
 
     public List<AccessHistoryEntry> getHistory(String accessId, int limit) {
@@ -78,6 +83,7 @@ public class AccessHistoryManager {
     public static class AccessHistoryEntry {
         private String accessId;
         private String url;
+        private String protocol;
         private int statusCode;
         private boolean success;
         private long timestamp;
@@ -86,6 +92,8 @@ public class AccessHistoryManager {
         public void setAccessId(String accessId) { this.accessId = accessId; }
         public String getUrl() { return url; }
         public void setUrl(String url) { this.url = url; }
+        public String getProtocol() { return protocol; }
+        public void setProtocol(String protocol) { this.protocol = protocol; }
         public int getStatusCode() { return statusCode; }
         public void setStatusCode(int statusCode) { this.statusCode = statusCode; }
         public boolean isSuccess() { return success; }

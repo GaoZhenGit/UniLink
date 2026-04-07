@@ -131,8 +131,22 @@ public class WorkerHandler extends TextWebSocketFrameHandler {
                 sessionRouter.forwardTextToAccess(ctx.channel(), text);
                 break;
             case "socks5_response":
-                // SOCKS5 连接响应，转发到 access
-                log.debug("收到 SOCKS5 响应: msgId={}, status={}", msg.get("msgId"), msg.get("status"));
+                // SOCKS5 连接响应，转发到 access，同时记录历史
+                String socks5RespMsgId = (String) msg.get("msgId");
+                if (socks5RespMsgId != null) {
+                    Map<String, Object> socks5ReqInfo = sessionRouter.removePendingRequest(socks5RespMsgId);
+                    if (socks5ReqInfo != null) {
+                        String accessId = (String) socks5ReqInfo.get("accessId");
+                        String host = (String) socks5ReqInfo.get("host");
+                        Integer port = socks5ReqInfo.get("port") != null ? (Integer) socks5ReqInfo.get("port") : 443;
+                        int statusCode = msg.get("status") != null ? ((Number) msg.get("status")).intValue() : -1;
+                        boolean success = statusCode == 0;
+                        // SOCKS5 只知道 host:port，无法判断真实 scheme（http/https），直接拼接
+                        String targetUrl = String.format("%s:%d", host, port);
+                        historyManager.recordAccess(accessId, targetUrl, "SOCKS5", statusCode, success);
+                    }
+                }
+                // 标记下一帧二进制数据需要转发
                 int socks5RespBodyLen = msg.get("bodyLen") != null ? ((Number) msg.get("bodyLen")).intValue() : 0;
                 if (socks5RespBodyLen > 0) {
                     sessionRouter.setPendingBinaryTarget(ctx.channel().id().asShortText(), "toAccess");
