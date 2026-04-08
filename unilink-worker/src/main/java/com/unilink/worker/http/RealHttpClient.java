@@ -112,9 +112,10 @@ public class RealHttpClient {
                 responseMap.put("bodyLen", chunk.length);
                 responseMap.put("finished", finished);
 
-                wsClient.sendMessage(new com.fasterxml.jackson.databind.ObjectMapper()
-                        .writeValueAsString(responseMap));
-                wsClient.sendBinaryMessage(chunk);
+                wsClient.sendMessageWithBody(
+                        new com.fasterxml.jackson.databind.ObjectMapper().writeValueAsString(responseMap),
+                        chunk
+                );
 
                 if (finished) break;
             }
@@ -157,13 +158,11 @@ public class RealHttpClient {
             response.put("bodyLen", message != null ? message.getBytes().length : 0);
             response.put("finished", true);
 
-            String jsonHeader = new com.fasterxml.jackson.databind.ObjectMapper()
-                    .writeValueAsString(response);
-            wsClient.sendMessage(jsonHeader);
-
-            if (message != null && message.length() > 0) {
-                wsClient.sendBinaryMessage(message.getBytes());
-            }
+            byte[] bodyBytes = message != null ? message.getBytes() : null;
+            wsClient.sendMessageWithBody(
+                    new com.fasterxml.jackson.databind.ObjectMapper().writeValueAsString(response),
+                    bodyBytes
+            );
         } catch (Exception e) {
             log.error("发送错误响应失败", e);
         }

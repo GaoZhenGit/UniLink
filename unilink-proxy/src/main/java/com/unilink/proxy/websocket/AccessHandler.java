@@ -16,6 +16,7 @@ import org.springframework.stereotype.Component;
 
 import java.util.HashMap;
 import java.util.Map;
+import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.Executors;
 import java.util.concurrent.ScheduledExecutorService;
 import java.util.concurrent.TimeUnit;
@@ -42,6 +43,35 @@ public class AccessHandler extends TextWebSocketFrameHandler {
     @Autowired
     private AccessHistoryManager historyManager;
 
+    // 分片缓存：fragId -> FragContext
+    private final Map<String, FragContext> fragCache = new ConcurrentHashMap<>();
+
+    // 待处理的二进制分片对应的 fragId
+    private final Map<String, String> pendingBinaryFragId = new ConcurrentHashMap<>();
+
+    /**
+     * 分片上下文
+     */
+    private static class FragContext {
+        final String fragId;
+        final int fragCount;
+        final byte[][] fragments;  // 按 seqIdx 存储分片数据
+        final String[] fragmentMetas;  // 按 seqIdx 存储分片元数据 JSON
+        final String metadata;  // 原始元数据 JSON
+        int receivedCount;
+        long timestamp;
+
+        FragContext(String fragId, int fragCount, String metadata) {
+            this.fragId = fragId;
+            this.fragCount = fragCount;
+            this.metadata = metadata;
+            this.fragments = new byte[fragCount][];
+            this.fragmentMetas = new String[fragCount];
+            this.receivedCount = 0;
+            this.timestamp = System.currentTimeMillis();
+        }
+    }
+
     @Override
     public void channelActive(ChannelHandlerContext ctx) {
         log.info("Access WebSocket连接建立: {}", ctx.channel().remoteAddress());
@@ -64,6 +94,18 @@ public class AccessHandler extends TextWebSocketFrameHandler {
         Map<String, Object> msg = objectMapper.readValue(text, Map.class);
         String type = (String) msg.get("type");
 
+        // 检查是否是分片消息
+        Integer fragCount = msg.get("fragCount") != null ? ((Number) msg.get("fragCount")).intValue() : 1;
+        Integer seqIdx = msg.get("seqIdx") != null ? ((Number) msg.get("seqIdx")).intValue() : 0;
+        String fragId = (String) msg.get("fragId");
+
+        if (fragCount > 1 && fragId != null) {
+            // 分片消息，缓存分片信息
+            handleFragmentedText(ctx, text, msg, fragId, fragCount, seqIdx);
+            return;
+        }
+
+        // 非分片消息，按原逻辑处理
         switch (type) {
             case "register":
                 String accessId = (String) msg.get("accessId");
@@ -134,19 +176,120 @@ public class AccessHandler extends TextWebSocketFrameHandler {
         }
     }
 
+    /**
+     * 处理分片文本消息
+     */
+    private void handleFragmentedText(ChannelHandlerContext ctx, String text, Map<String, Object> msg,
+                                      String fragId, int fragCount, int seqIdx) throws Exception {
+        FragContext fragCtx = fragCache.get(fragId);
+        if (fragCtx == null) {
+            // 第一个分片，创建分片上下文
+            fragCtx = new FragContext(fragId, fragCount, text);
+            fragCache.put(fragId, fragCtx);
+            log.debug("Access开始接收分片消息: fragId={}, fragCount={}", fragId, fragCount);
+        }
+
+        // 存储分片元数据
+        fragCtx.fragmentMetas[seqIdx] = text;
+
+        // 设置待处理的 fragId（等待二进制分片）
+        pendingBinaryFragId.put(ctx.channel().id().asShortText(), fragId);
+
+        // 如果是第一个分片，设置 binary target
+        if (seqIdx == 0) {
+            sessionRouter.setPendingBinaryTarget(ctx.channel().id().asShortText(), "toWorker");
+        }
+
+        log.debug("Access收到分片元数据: fragId={}, seqIdx={}/{}", fragId, seqIdx, fragCount);
+    }
+
     @Override
     protected void handleBinaryFrame(ChannelHandlerContext ctx, BinaryWebSocketFrame frame) throws Exception {
         byte[] body = new byte[frame.content().readableBytes()];
         frame.content().readBytes(body);
 
-        // 检查是否有待转发的目标
-        String target = sessionRouter.getAndClearPendingBinaryTarget(ctx.channel().id().asShortText());
-        if ("toWorker".equals(target)) {
-            sessionRouter.forwardBinaryToWorker(ctx.channel(), body);
+        String channelId = ctx.channel().id().asShortText();
+        String fragId = pendingBinaryFragId.get(channelId);
+
+        if (fragId != null) {
+            // 处理分片二进制数据
+            handleFragmentedBinary(ctx, body, fragId);
         } else {
-            // 默认转发到 worker
+            // 非分片消息，直接转发
             sessionRouter.forwardBinaryToWorker(ctx.channel(), body);
         }
+    }
+
+    /**
+     * 处理分片二进制数据
+     */
+    private void handleFragmentedBinary(ChannelHandlerContext ctx, byte[] body, String fragId) throws Exception {
+        FragContext fragCtx = fragCache.get(fragId);
+        if (fragCtx == null) {
+            log.warn("未找到分片上下文: fragId={}", fragId);
+            sessionRouter.forwardBinaryToWorker(ctx.channel(), body);
+            return;
+        }
+
+        String channelId = ctx.channel().id().asShortText();
+        pendingBinaryFragId.remove(channelId);
+
+        // 找到当前分片应该放置的位置
+        int placedIdx = -1;
+        for (int i = 0; i < fragCtx.fragCount; i++) {
+            if (fragCtx.fragments[i] == null) {
+                fragCtx.fragments[i] = body;
+                placedIdx = i;
+                fragCtx.receivedCount++;
+                break;
+            }
+        }
+
+        if (placedIdx == -1) {
+            log.warn("分片已满，无法放置: fragId={}", fragId);
+            return;
+        }
+
+        log.debug("Access收到分片数据: fragId={}, placedIdx={}/{}", fragId, placedIdx, fragCtx.fragCount);
+
+        // 检查是否所有分片都已接收
+        if (fragCtx.receivedCount == fragCtx.fragCount) {
+            // 组装完整消息
+            assembleAndForward(ctx, fragCtx);
+            // 清理缓存
+            fragCache.remove(fragId);
+        }
+    }
+
+    /**
+     * 组装分片消息并转发
+     */
+    private void assembleAndForward(ChannelHandlerContext ctx, FragContext fragCtx) throws Exception {
+        // 计算总大小
+        int totalSize = 0;
+        for (int i = 0; i < fragCtx.fragCount; i++) {
+            totalSize += fragCtx.fragments[i].length;
+        }
+
+        // 组装二进制数据
+        byte[] assembledData = new byte[totalSize];
+        int offset = 0;
+        for (int i = 0; i < fragCtx.fragCount; i++) {
+            System.arraycopy(fragCtx.fragments[i], 0, assembledData, offset, fragCtx.fragments[i].length);
+            offset += fragCtx.fragments[i].length;
+        }
+
+        log.debug("Access组装分片消息完成: fragId={}, totalSize={}", fragCtx.fragId, totalSize);
+
+        // 使用第一个分片的元数据，移除分片标记后转发
+        Map<String, Object> meta = objectMapper.readValue(fragCtx.metadata, Map.class);
+        meta.remove("fragId");
+        meta.remove("seqIdx");
+        meta.remove("fragCount");
+
+        String forwardedMeta = objectMapper.writeValueAsString(meta);
+        sessionRouter.forwardTextToWorker(ctx.channel(), forwardedMeta);
+        sessionRouter.forwardBinaryToWorker(ctx.channel(), assembledData);
     }
 
     private void handleHeartbeat(ChannelHandlerContext ctx, Map<String, Object> msg) {
@@ -179,7 +322,24 @@ public class AccessHandler extends TextWebSocketFrameHandler {
                     log.error("发送心跳失败", e);
                 }
             }
+            // 清理过期的分片缓存（超过 30 秒未完成）
+            cleanupExpiredFragments();
         }, interval, interval, TimeUnit.SECONDS);
+    }
+
+    /**
+     * 清理过期的分片缓存
+     */
+    private void cleanupExpiredFragments() {
+        long now = System.currentTimeMillis();
+        long maxAge = 30000; // 30 秒
+        fragCache.entrySet().removeIf(entry -> {
+            if (now - entry.getValue().timestamp > maxAge) {
+                log.warn("Access清理过期分片: fragId={}, age={}ms", entry.getKey(), now - entry.getValue().timestamp);
+                return true;
+            }
+            return false;
+        });
     }
 
     private void stopHeartbeat(ChannelHandlerContext ctx) {

@@ -96,12 +96,11 @@ public class ConnectTunnelHandler {
             response.put("bodyLen", message != null ? message.getBytes().length : 0);
             response.put("finished", true);
 
-            String json = new com.fasterxml.jackson.databind.ObjectMapper().writeValueAsString(response);
-            wsClient.sendMessage(json);
-
-            if (message != null && message.length() > 0) {
-                wsClient.sendBinaryMessage(message.getBytes());
-            }
+            byte[] bodyBytes = message != null ? message.getBytes() : null;
+            wsClient.sendMessageWithBody(
+                    new com.fasterxml.jackson.databind.ObjectMapper().writeValueAsString(response),
+                    bodyBytes
+            );
         } catch (Exception e) {
             log.error("发送CONNECT响应失败", e);
         }
@@ -153,9 +152,10 @@ public class ConnectTunnelHandler {
             msg.put("type", "tunnel_data");
             msg.put("bodyLen", data.length);
 
-            String json = new com.fasterxml.jackson.databind.ObjectMapper().writeValueAsString(msg);
-            wsClient.sendMessage(json);
-            wsClient.sendBinaryMessage(data);
+            wsClient.sendMessageWithBody(
+                    new com.fasterxml.jackson.databind.ObjectMapper().writeValueAsString(msg),
+                    data
+            );
         } catch (Exception e) {
             log.error("发送隧道数据失败", e);
         }

@@ -138,9 +138,10 @@ public class Socks5TunnelHandler {
             msg.put("status", status & 0xFF);
             msg.put("bodyLen", response.length);
 
-            String json = new com.fasterxml.jackson.databind.ObjectMapper().writeValueAsString(msg);
-            wsClient.sendMessage(json);
-            wsClient.sendBinaryMessage(response);
+            wsClient.sendMessageWithBody(
+                    new com.fasterxml.jackson.databind.ObjectMapper().writeValueAsString(msg),
+                    response
+            );
 
             log.debug("SOCKS5 响应已发送: msgId={}, status={}", msgId, status);
         } catch (Exception e) {
@@ -203,9 +204,10 @@ public class Socks5TunnelHandler {
             msg.put("type", "socks5_tunnel_data");
             msg.put("bodyLen", data.length);
 
-            String json = new com.fasterxml.jackson.databind.ObjectMapper().writeValueAsString(msg);
-            wsClient.sendMessage(json);
-            wsClient.sendBinaryMessage(data);
+            wsClient.sendMessageWithBody(
+                    new com.fasterxml.jackson.databind.ObjectMapper().writeValueAsString(msg),
+                    data
+            );
             log.debug("SOCKS5 发送隧道数据: msgId={}, len={}", msgId, data.length);
         } catch (Exception e) {
             log.error("发送隧道数据失败", e);

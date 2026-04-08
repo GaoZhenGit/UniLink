@@ -23,6 +23,7 @@ import java.net.URI;
 import java.nio.ByteBuffer;
 import java.util.HashMap;
 import java.util.Map;
+import java.util.UUID;
 import java.util.concurrent.CountDownLatch;
 import java.util.concurrent.Executors;
 import java.util.concurrent.ScheduledExecutorService;
@@ -34,6 +35,9 @@ public class AccessWebSocketClient {
 
     private static final Logger log = LoggerFactory.getLogger(AccessWebSocketClient.class);
     private static final ObjectMapper objectMapper = new ObjectMapper();
+
+    // WebSocket 帧最大大小 (8KB)，超过则分片
+    private static final int MAX_FRAME_SIZE = 8192;
 
     @Autowired
     private AccessProxyConfig config;
@@ -326,6 +330,69 @@ public class AccessWebSocketClient {
         synchronized (sendLock) {
             if (session != null && session.isOpen()) {
                 session.sendMessage(message);
+            }
+        }
+    }
+
+    /**
+     * 同时发送 JSON 元数据和二进制数据，自动处理大数据的分片
+     * 如果二进制数据超过 MAX_FRAME_SIZE，则自动分片发送
+     * @param json JSON 元数据字符串
+     * @param binaryData 二进制数据，可以为 null 或空
+     */
+    public void sendMessageWithBody(String json, byte[] binaryData) throws Exception {
+        synchronized (sendLock) {
+            if (session == null || !session.isOpen()) {
+                throw new RuntimeException("WebSocket未连接");
+            }
+
+            if (binaryData == null || binaryData.length == 0) {
+                // 无二进制数据，直接发送 JSON
+                session.sendMessage(new TextMessage(json));
+                return;
+            }
+
+            if (binaryData.length <= MAX_FRAME_SIZE) {
+                // 不需要分片，直接发送
+                session.sendMessage(new TextMessage(json));
+                session.sendMessage(new BinaryMessage(ByteBuffer.wrap(binaryData)));
+            } else {
+                // 需要分片
+                String fragId = UUID.randomUUID().toString();
+                int fragCount = (binaryData.length + MAX_FRAME_SIZE - 1) / MAX_FRAME_SIZE;
+
+                log.debug("Access开始分片发送: fragId={}, totalSize={}, fragCount={}", fragId, binaryData.length, fragCount);
+
+                int offset = 0;
+                int seqIdx = 0;
+
+                while (offset < binaryData.length) {
+                    int remaining = binaryData.length - offset;
+                    int chunkSize = Math.min(remaining, MAX_FRAME_SIZE);
+
+                    // 创建分片元数据
+                    @SuppressWarnings("unchecked")
+                    Map<String, Object> fragMetadata = objectMapper.readValue(json, Map.class);
+                    fragMetadata.put("fragId", fragId);
+                    fragMetadata.put("seqIdx", seqIdx);
+                    fragMetadata.put("fragCount", fragCount);
+                    fragMetadata.put("bodyLen", chunkSize);
+
+                    String fragJson = objectMapper.writeValueAsString(fragMetadata);
+
+                    // 提取分片数据
+                    byte[] chunk = new byte[chunkSize];
+                    System.arraycopy(binaryData, offset, chunk, 0, chunkSize);
+
+                    // 发送分片：先发 JSON 元数据，再发二进制分片
+                    session.sendMessage(new TextMessage(fragJson));
+                    session.sendMessage(new BinaryMessage(ByteBuffer.wrap(chunk)));
+
+                    offset += chunkSize;
+                    seqIdx++;
+
+                    log.debug("Access发送分片: fragId={}, seqIdx={}/{}", fragId, seqIdx, fragCount);
+                }
             }
         }
     }

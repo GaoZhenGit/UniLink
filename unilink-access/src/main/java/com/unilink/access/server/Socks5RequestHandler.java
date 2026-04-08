@@ -119,8 +119,7 @@ public class Socks5RequestHandler {
             msg.put("type", "socks5_tunnel_data");
             msg.put("bodyLen", data.length);
 
-            String json = objectMapper.writeValueAsString(msg);
-            wsClient.sendMessage(json, data);
+            wsClient.sendMessageWithBody(objectMapper.writeValueAsString(msg), data);
             log.debug("SOCKS5 发送隧道数据到 Proxy: msgId={}, len={}", msgId, data.length);
         } catch (Exception e) {
             log.error("发送 SOCKS5 隧道数据失败", e);

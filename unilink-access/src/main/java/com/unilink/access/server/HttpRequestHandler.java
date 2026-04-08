@@ -71,7 +71,7 @@ public class HttpRequestHandler {
                 return;
             }
 
-            wsClient.sendMessage(jsonHeader, bodyLen > 0 ? body : null);
+            wsClient.sendMessageWithBody(jsonHeader, bodyLen > 0 ? body : null);
             log.info("HTTP请求已转发给Proxy: {} {} (msgId={})", method, url, msgId);
         } catch (Exception e) {
             log.error("转发HTTP请求失败: {} {}", msgId, e.getMessage());
@@ -164,8 +164,7 @@ public class HttpRequestHandler {
                 msg.put("type", "tunnel_data");
                 msg.put("bodyLen", data.length);
 
-                String json = objectMapper.writeValueAsString(msg);
-                wsClient.sendMessage(json, data);
+                wsClient.sendMessageWithBody(objectMapper.writeValueAsString(msg), data);
             }
         } catch (Exception e) {
             log.error("发送隧道数据到Proxy失败: {}", msgId, e);
