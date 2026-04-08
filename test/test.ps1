@@ -79,7 +79,7 @@ function Test-StreamingRequest {
     $cmd = "curl.exe -s --max-time $TimeoutSec"
     if ($Proxy)     { $cmd += " -x $Proxy" }
     if ($ProxyAuth) { $cmd += " -U $ProxyAuth" }
-    $cmd += " --data-binary `"@test\claude_request.json`""
+    $cmd += " --data-binary `"@test\claude_request_short.json`""
     $cmd += " -H `"Content-Type: application/json`""
     $cmd += " -H `"Authorization: Bearer $($env:MINIMAX_API_KEY)`""
     $cmd += " `"https://api.minimaxi.com/anthropic/v1/messages`""
@@ -181,14 +181,19 @@ $ok = ($r[1] -lt 5)
 Write-Host "EXIT: $($r[0]), TIME: $($r[1])s (expected: < 5s)" -ForegroundColor $(if ($ok) { "Green" } else { "Red" })
 if ($ok) { $passed++ }
 
-# --- MiniMax API via SOCKS5 proxy (streaming) ---
-$total++
+# --- MiniMax API streaming tests ---
 if (-not $env:MINIMAX_API_KEY) {
     Write-Host ""
-    Write-Host "--- MiniMax API via SOCKS5 proxy (streaming) ---" -ForegroundColor Cyan
+    Write-Host "--- MiniMax streaming (SOCKS5 + HTTP) ---" -ForegroundColor Cyan
     Write-Host "SKIP: MINIMAX_API_KEY not set" -ForegroundColor DarkGray
 } else {
+    # SOCKS5 proxy
+    $total++
     if (Test-StreamingRequest -Name "MiniMax via SOCKS5" -Proxy "socks5h://127.0.0.1:1080" -ProxyAuth "socks5:password") { $passed++ }
+
+    # HTTP proxy
+    $total++
+    if (Test-StreamingRequest -Name "MiniMax via HTTP proxy" -Proxy "http://localhost:8888" -ProxyAuth "admin:password123") { $passed++ }
 }
 
 # --- Access history query ---
