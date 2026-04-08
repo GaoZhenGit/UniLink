@@ -14,7 +14,7 @@ Start-Sleep -Seconds 2
 # 2. Clean logs and old jars
 Write-Host "=== Cleaning logs and old jars ===" -ForegroundColor Yellow
 Remove-Item -Path .\logs\* -Force -ErrorAction SilentlyContinue
-Remove-Item 'unilink-proxy/target/unilink-proxy-1.1.0.jar', 'unilink-worker/target/unilink-worker-1.1.0.jar', 'unilink-access/target/unilink-access-1.1.0.jar' -Force -ErrorAction SilentlyContinue
+Remove-Item 'unilink-proxy/target/unilink-proxy-1.2.0.jar', 'unilink-worker/target/unilink-worker-1.2.0.jar', 'unilink-access/target/unilink-access-1.2.0.jar' -Force -ErrorAction SilentlyContinue
 
 # 3. Build project
 Write-Host "=== Building project ===" -ForegroundColor Yellow
@@ -63,7 +63,7 @@ function Invoke-Curl {
 }
 
 # =============================================
-# Helper: streaming request test (for SSE responses)
+# Helper: streaming request test (for SSE responses, real-time progress)
 # =============================================
 function Test-StreamingRequest {
     param(
@@ -74,7 +74,7 @@ function Test-StreamingRequest {
     )
 
     Write-Host ""
-    Write-Host "--- $Name (streaming) ---" -ForegroundColor Cyan
+    Write-Host "--- $Name ---" -ForegroundColor Cyan
 
     $cmd = "curl.exe -s --max-time $TimeoutSec"
     if ($Proxy)     { $cmd += " -x $Proxy" }
@@ -87,11 +87,85 @@ function Test-StreamingRequest {
     $outFile = "$env:TEMP\minimax_stream_$([guid]::NewGuid().ToString('N')).txt"
     Write-Host "CMD: $cmd" -ForegroundColor DarkGray
 
+    # Baseline network stats
+    $prevNet = @{}
+    Get-NetAdapterStatistics -ErrorAction SilentlyContinue | ForEach-Object {
+        $prevNet[$_.Name] = @{
+            SentBytes     = $_.SentBytes
+            ReceivedBytes = $_.ReceivedBytes
+            SentPkts      = $_.SentUnicastPackets
+            RcvPkts       = $_.ReceivedUnicastPackets
+        }
+    }
+
+    # Start curl asynchronously
+    $psi = New-Object System.Diagnostics.ProcessStartInfo
+    $psi.FileName = "cmd.exe"
+    $psi.Arguments = "/c $cmd -o `"$outFile`""
+    $psi.RedirectStandardOutput = $false
+    $psi.RedirectStandardError = $false
+    $psi.UseShellExecute = $false
+    $psi.CreateNoWindow = $true
+    $psi.WorkingDirectory = $PWD
+    $process = [System.Diagnostics.Process]::Start($psi)
+
     $sw = [Diagnostics.Stopwatch]::StartNew()
-    $process = Start-Process cmd -ArgumentList "/c", "$cmd -o `"$outFile`"" -NoNewWindow -Wait -PassThru
+    $lastSize = 0
+
+    # Progress loop
+    while (-not $process.HasExited) {
+        Start-Sleep -Milliseconds 200
+        $sw.Stop()
+        $elapsed = [math]::Round($sw.Elapsed.TotalSeconds, 1)
+        $sw.Start()
+
+        # Network packet stats
+        $totalSentPkts = 0; $totalRcvPkts = 0
+        Get-NetAdapterStatistics -ErrorAction SilentlyContinue | ForEach-Object {
+            if ($prevNet.ContainsKey($_.Name)) {
+                $totalSentPkts += $_.SentUnicastPackets - $prevNet[$_.Name].SentPkts
+                $totalRcvPkts  += $_.ReceivedUnicastPackets - $prevNet[$_.Name].RcvPkts
+            }
+        }
+
+        if (Test-Path $outFile) {
+            $size = (Get-Item $outFile).Length
+            if ($size -gt 0) {
+                $delta = $size - $lastSize
+                $rate  = [math]::Round($delta / 0.2)
+                $lastSize = $size
+                $content   = Get-Content $outFile -Raw -ErrorAction SilentlyContinue
+                $dataCount = ([regex]::Matches($content, "(?m)^data:")).Count
+                $barLen  = 20
+                $filled  = [math]::Min([math]::Floor($size / 500), $barLen)
+                $bar     = ("#" * $filled).PadRight($barLen)
+                Write-Host "`r  [$bar] $size B | $dataCount chunks | ${elapsed}s | ${rate} B/s | TX:$totalSentPkts RX:$totalRcvPkts   " -NoNewline -ForegroundColor Yellow
+            } else {
+                Write-Host "`r  waiting... ${elapsed}s | TX:$totalSentPkts RX:$totalRcvPkts   " -NoNewline -ForegroundColor DarkGray
+            }
+        } else {
+            Write-Host "`r  connecting... ${elapsed}s | TX:$totalSentPkts RX:$totalRcvPkts   " -NoNewline -ForegroundColor DarkGray
+        }
+    }
+
+    # Final network stats
+    $totalSentPkts = 0; $totalRcvPkts = 0; $totalSentBytes = 0; $totalRcvBytes = 0
+    Get-NetAdapterStatistics -ErrorAction SilentlyContinue | ForEach-Object {
+        if ($prevNet.ContainsKey($_.Name)) {
+            $totalSentPkts  += $_.SentUnicastPackets - $prevNet[$_.Name].SentPkts
+            $totalRcvPkts   += $_.ReceivedUnicastPackets - $prevNet[$_.Name].RcvPkts
+            $totalSentBytes += $_.SentBytes - $prevNet[$_.Name].SentBytes
+            $totalRcvBytes  += $_.ReceivedBytes - $prevNet[$_.Name].ReceivedBytes
+        }
+    }
+
+    # Final status
     $sw.Stop()
+    $elapsed  = [math]::Round($sw.Elapsed.TotalSeconds, 2)
     $exitCode = $process.ExitCode
-    $elapsed = [math]::Round($sw.Elapsed.TotalSeconds, 2)
+
+    Write-Host ""
+    Write-Host "  NETWORK: TX=$totalSentPkts pkts ($totalSentBytes B) | RX=$totalRcvPkts pkts ($totalRcvBytes B)" -ForegroundColor Cyan
 
     $ok = $false
     if ($exitCode -eq 0 -and (Test-Path $outFile)) {
@@ -99,7 +173,7 @@ function Test-StreamingRequest {
         $eventCount = ([regex]::Matches($content, "(?m)^event:")).Count
         $dataCount  = ([regex]::Matches($content, "(?m)^data:")).Count
         $hasStreaming = $eventCount -gt 0 -and $dataCount -gt 0
-        Write-Host "  size=$($content.Length) bytes, event=$eventCount, data=$dataCount, time=${elapsed}s" -ForegroundColor Yellow
+        Write-Host "  RESULT: size=$($content.Length) B, event=$eventCount, data=$dataCount, time=${elapsed}s" -ForegroundColor Yellow
         $ok = $hasStreaming
         Remove-Item $outFile -Force -ErrorAction SilentlyContinue
     } else {
